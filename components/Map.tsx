@@ -11,11 +11,19 @@ interface Vehicle {
   status: string
 }
 
-interface MapProps {
-  vehicles: Vehicle[]
+interface EmergencyLocation {
+  id: string
+  type: string
+  location: [number, number]
+  name: string
 }
 
-export default function Map({ vehicles }: MapProps) {
+interface MapProps {
+  vehicles: Vehicle[]
+  emergencyLocations: EmergencyLocation[]
+}
+
+export default function Map({ vehicles, emergencyLocations }: MapProps) {
   const mapContainer = useRef<HTMLDivElement>(null)
   const [map, setMap] = useState<mapboxgl.Map | null>(null)
   const markersRef = useRef<mapboxgl.Marker[]>([])
@@ -74,7 +82,26 @@ export default function Map({ vehicles }: MapProps) {
 
       markersRef.current.push(marker)
     })
-  }, [vehicles, map])
+
+    emergencyLocations.forEach((location) => {
+      const el = document.createElement("div")
+      el.className = "w-5 h-5 rounded-full bg-red-600 border-2 border-white shadow-md"
+
+      const marker = new mapboxgl.Marker(el)
+        .setLngLat(location.location)
+        .setPopup(
+          new mapboxgl.Popup({ offset: 25 }).setHTML(
+            `<div class="p-2">
+              <h3 class="font-bold text-red-600">${location.name}</h3>
+              <p class="text-gray-600">Type: ${location.type}</p>
+            </div>`
+          )
+        )
+        .addTo(map)
+
+      markersRef.current.push(marker)
+    })
+  }, [vehicles, emergencyLocations, map])
 
   return (
     <div 

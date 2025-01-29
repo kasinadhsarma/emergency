@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import Layout from "@/components/Layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -93,10 +93,52 @@ export default function UserDashboard() {
       eta: "10 mins"
     }
   ]);
+  const [emergencyLocations, setEmergencyLocations] = useState<any[]>([]);
 
   const handleEmergencyClick = (type: string) => {
     setSelectedEmergency(type);
   };
+
+  const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await fetch("/api/detect/video", {
+        method: "POST",
+        body: formData,
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to upload video");
+      }
+
+      const data = await response.json();
+      console.log("Video detection results:", data);
+    } catch (error) {
+      console.error("Error uploading video:", error);
+    }
+  };
+
+  useEffect(() => {
+    const fetchEmergencyLocations = async () => {
+      try {
+        const response = await fetch("/api/locations");
+        if (!response.ok) {
+          throw new Error("Failed to fetch emergency locations");
+        }
+        const data = await response.json();
+        setEmergencyLocations(data.locations);
+      } catch (error) {
+        console.error("Error fetching emergency locations:", error);
+      }
+    };
+
+    fetchEmergencyLocations();
+  }, []);
 
   return (
     <Layout>
@@ -195,7 +237,7 @@ export default function UserDashboard() {
               </CardHeader>
               <CardContent className="p-0">
                 <div className={isMapExpanded ? "h-[800px]" : "h-[400px]"}>
-                  <Map vehicles={vehicles} />
+                  <Map vehicles={vehicles} emergencyLocations={emergencyLocations} />
                 </div>
               </CardContent>
             </Card>
@@ -233,6 +275,19 @@ export default function UserDashboard() {
                         <MapPin className="mr-2 h-4 w-4" />
                         Saved Locations
                       </Button>
+                      <input
+                        type="file"
+                        accept="video/*"
+                        onChange={handleVideoUpload}
+                        className="hidden"
+                        id="video-upload"
+                      />
+                      <label htmlFor="video-upload">
+                        <Button className="w-full" variant="outline">
+                          <FileText className="mr-2 h-4 w-4" />
+                          Upload Video
+                        </Button>
+                      </label>
                     </div>
                   </CardContent>
                 </Card>
