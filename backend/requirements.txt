@@ -1,0 +1,22 @@
+# Core ML and Computer Vision
+torch==2.1.1
+ultralytics==8.3.68
+opencv-python==4.11.0.86
+numpy==1.26.2
+
+# Path Planning and Mapping
+osmnx==2.0.1
+networkx==3.4.2
+folium==0.14.0
+
+# Data Processing
+pandas==2.1.3
+pillow==10.1.0
+pyyaml==6.0.2
+
+# Scientific Computing
+scikit-learn==1.3.2
+scipy==1.15.1
+
+# Utilities
+tqdm==4.67.1
