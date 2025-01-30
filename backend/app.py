@@ -132,48 +132,15 @@ async def find_route(request: RouteRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-@app.get("/api/locations")
-async def get_locations():
-    """Get all emergency locations"""
-    return {"locations": EMERGENCY_LOCATIONS}
-
-@app.get("/api/vehicles")
-async def get_vehicles():
-    """Get all vehicles"""
-    return {"vehicles": pathfinder.get_vehicles()}
-
-@app.get("/api/requests")
-async def get_requests():
-    """Get all emergency requests"""
-    return {"requests": pathfinder.get_requests()}
-
-@app.get("/api/stations")
-async def get_stations():
-    """Get all stations"""
-    return {"stations": pathfinder.get_stations()}
-
-@app.post("/api/set_emergency_contacts")
-async def set_emergency_contacts(contacts: List[EmergencyContact]):
-    """Set emergency contacts"""
-    # Save contacts to a database or file
-    # For simplicity, we'll just print them
-    for contact in contacts:
-        print(f"Set emergency contact: {contact.type} - {contact.number}")
-    return {"message": "Emergency contacts set successfully"}
-
-@app.get("/api/medical_information")
-async def get_medical_information():
-    """Get medical information"""
-    # Fetch medical information from a database or file
-    # For simplicity, we'll just return a static response
-    return {"medical_information": "This is a sample medical information."}
-
-@app.get("/api/saved_locations")
-async def get_saved_locations():
-    """Get saved locations"""
-    # Fetch saved locations from a database or file
-    # For simplicity, we'll just return a static response
-    return {"saved_locations": ["Home", "Work", "Gym"]}
+@app.get("/locations/{type}")
+async def get_locations(type: str):
+    """Get emergency locations by type"""
+    if type not in EMERGENCY_LOCATIONS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid location type. Must be one of: {list(EMERGENCY_LOCATIONS.keys())}"
+        )
+    return {"locations": EMERGENCY_LOCATIONS[type]}
 
 if __name__ == "__main__":
     uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)

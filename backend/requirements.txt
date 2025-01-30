@@ -5,8 +5,8 @@ opencv-python==4.8.0.76
 numpy==1.26.2
 numba==0.59.0
 onnxruntime==1.17.0
-albumentations==1.1.0  # Using older version for compatibility
-ultralytics==8.0.0  # For YOLOv5 pre-trained models
+albumentations>=1.3.1  # Updated for better YOLOv8 compatibility
+ultralytics>=8.1.0  # Updated for latest YOLOv8 support
 
 # Path Planning and Mapping
 osmnx==2.0.1
@@ -20,7 +20,7 @@ pyyaml==6.0.2
 
 # Scientific Computing
 scikit-learn==1.3.2
-scipy==1.11.4  # Using older version for compatibility
+scipy>=1.11.4
 
 # Utilities
 tqdm>=4.67.1
