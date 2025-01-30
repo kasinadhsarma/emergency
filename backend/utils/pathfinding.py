@@ -43,8 +43,8 @@ class PathFinder:
         """Get the nearest node in the road network to a point"""
         return ox.nearest_nodes(self._graph, lon, lat)
 
-    def _calculate_route(self, start_node: int, end_node: int, 
-                        traffic_weights: Dict[int, float] = None) -> Tuple[List[int], float]:
+    def _calculate_route(self, start_node: int, end_node: int,
+                        traffic_weights: Dict[int, float] = None) -> Tuple[List[int], float, Dict[int, float]]:
         """Calculate the optimal route between two nodes"""
         if traffic_weights:
             # Apply traffic density weights to travel times
@@ -52,32 +52,32 @@ class PathFinder:
                 edge_id = edge[2]
                 if edge_id in traffic_weights:
                     self._graph.edges[edge]['weight'] = (
-                        self._graph.edges[edge]['travel_time'] * 
+                        self._graph.edges[edge]['travel_time'] *
                         traffic_weights[edge_id]
                     )
                 else:
                     self._graph.edges[edge]['weight'] = self._graph.edges[edge]['travel_time']
-        
+
         try:
             route = nx.shortest_path(
-                self._graph, 
-                start_node, 
-                end_node, 
+                self._graph,
+                start_node,
+                end_node,
                 weight='weight'
             )
             route_length = sum(
-                self._graph.edges[edge]['length'] 
+                self._graph.edges[edge]['length']
                 for edge in zip(route[:-1], route[1:])
             )
-            return route, route_length
+            return route, route_length, traffic_weights
         except nx.NetworkXNoPath:
-            return None, None
+            return None, None, None
 
-    def find_optimal_route(self, 
-                          current_lat: float, 
+    def find_optimal_route(self,
+                          current_lat: float,
                           current_lon: float,
                           vehicle_type: str,
-                          traffic_weights: Dict[int, float] = None) -> Tuple[List[Tuple[float, float]], Location]:
+                          traffic_weights: Dict[int, float] = None) -> Tuple[List[Tuple[float, float]], Location, Dict[int, float]]:
         """
         Find the optimal route to the nearest appropriate emergency service location
 
@@ -113,11 +113,12 @@ class PathFinder:
         best_route = None
         best_length = float('inf')
         best_location = None
+        best_traffic_weights = None
 
-        def process_location(loc: Location) -> Tuple[List[int], float, Location]:
+        def process_location(loc: Location) -> Tuple[List[int], float, Location, Dict[int, float]]:
             end_node = self._get_nearest_node(loc.lat, loc.lon)
-            route, length = self._calculate_route(start_node, end_node, traffic_weights)
-            return route, length, loc
+            route, length, traffic_weights = self._calculate_route(start_node, end_node, traffic_weights)
+            return route, length, loc, traffic_weights
 
         with ThreadPoolExecutor() as executor:
             futures = [
@@ -126,11 +127,12 @@ class PathFinder:
             ]
 
             for future in futures:
-                route, length, loc = future.result()
+                route, length, loc, traffic_weights = future.result()
                 if route and length < best_length:
                     best_route = route
                     best_length = length
                     best_location = loc
+                    best_traffic_weights = traffic_weights
 
         if not best_route:
             raise ValueError("No valid route found to any appropriate destination")
@@ -141,9 +143,9 @@ class PathFinder:
             for node in best_route
         ]
 
-        return route_coords, best_location
+        return route_coords, best_location, best_traffic_weights
 
-    def visualize_route(self, route_coords: List[Tuple[float, float]], 
+    def visualize_route(self, route_coords: List[Tuple[float, float]],
                        destination: Location) -> folium.Map:
         """Create an interactive map visualization of the route"""
         # Create base map centered on route
