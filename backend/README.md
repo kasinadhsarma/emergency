@@ -48,6 +48,12 @@ backend/
 │   ├── detection.py    # Vehicle detection implementation
 │   └── pathfinding.py  # Route optimization implementation
 │
+├── notebooks/           # Jupyter notebooks for model training and testing
+│   ├── 1_data_exploration.ipynb
+│   ├── 2_model_training.ipynb
+│   ├── 3_detection_testing.ipynb
+│   └── 4_pathfinding_testing.ipynb
+│
 ├── app.py              # FastAPI application
 └── requirements.txt    # Python dependencies
 ```
@@ -124,6 +130,11 @@ The pathfinding system:
 ```bash
 yolo task=detect mode=train data=dataset.yaml model=yolov8n.pt epochs=100
 ```
+
+### Running the Model Training Notebook
+
+1. Open the Jupyter notebook `2_model_training.ipynb` located in the `backend/notebooks` directory.
+2. Follow the instructions in the notebook to load the dataset, define the YOLOv8 model architecture, train the model, and save the trained model to a file.
 
 ### Adding New Emergency Locations
 
