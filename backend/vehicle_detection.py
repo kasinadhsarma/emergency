@@ -4,8 +4,7 @@ import numpy as np
 from pathlib import Path
 from typing import List, Dict, Tuple, Optional
 import torchvision.transforms as T
-from torchvision.models.detection import fasterrcnn_resnet50_fpn_v2
-from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from ultralytics import YOLO
 import torch.cuda
 from torch.cuda.amp import autocast
 from numba import jit
@@ -26,7 +25,7 @@ class VehicleDetector:
             self.stream2 = torch.cuda.Stream()
 
         # Load and optimize the model
-        self._setup_model(model_path)
+        self._setup_model('backend/runs/vehicle_detection_multi3/weights/best.pt')
 
         # Set up transforms on GPU if available
         self.transform = T.Compose([
@@ -40,29 +39,19 @@ class VehicleDetector:
         
     def _setup_model(self, model_path: str):
         """Set up and optimize the model"""
-        checkpoint = torch.load(model_path, map_location=self.device)
-        self.classes = checkpoint['class_names']
-        num_classes = checkpoint['num_classes']
-
-        # Initialize model architecture
-        self.model = fasterrcnn_resnet50_fpn_v2(pretrained=False)
-        in_features = self.model.roi_heads.box_predictor.cls_score.in_features
-        self.model.roi_heads.box_predictor = FastRCNNPredictor(in_features, num_classes)
-
-        # Load trained weights
-        self.model.load_state_dict(checkpoint['model_state_dict'])
-        
-        # Optimize model
-        if self.device.type == 'cuda':
-            # Convert to TorchScript for faster inference
-            self.model = torch.jit.script(self.model)
-            # Quantize model for better performance
-            self.model = torch.quantization.quantize_dynamic(
-                self.model, {torch.nn.Linear}, dtype=torch.qint8
-            )
-        
-        self.model.to(self.device)
-        self.model.eval()
+        try:
+            # Initialize YOLO model with our custom trained model
+            self.model = YOLO('backend/runs/vehicle_detection_multi3/weights/best.pt')
+            
+            # Define class names from our custom dataset
+            self.classes = {0: 'ambulance', 1: 'police', 2: 'firetruck'}
+            
+            # Set model to evaluation mode
+            self.model.eval()
+            
+        except Exception as e:
+            print(f"Error setting up model: {str(e)}")
+            raise
 
     @jit(nopython=True)
     def _preprocess_numba(self, image: np.ndarray) -> np.ndarray:
@@ -81,33 +70,27 @@ class VehicleDetector:
         """
         Detect vehicles in a single image using optimized inference
         """
-        # Preprocess image
-        img_tensor = self.preprocess_image(image)
+        # YOLO expects BGR images in numpy format directly
+        results = self.model(image)
         
-        # Run inference with automatic mixed precision
-        with torch.no_grad(), autocast():
-            if self.device.type == 'cuda':
-                with self.stream1:
-                    prediction = self.model([img_tensor])
-            else:
-                prediction = self.model([img_tensor])
-
         # Process detections
         detections = []
-        boxes = prediction[0]['boxes'].cpu().numpy()
-        scores = prediction[0]['scores'].cpu().numpy()
-        labels = prediction[0]['labels'].cpu().numpy()
-
-        # Filter detections with confidence > 0.5
-        for box, score, label in zip(boxes, scores, labels):
-            if score > 0.5 and int(label) in self.classes:
-                detection = {
-                    'class': self.classes[int(label)],
-                    'confidence': float(score),
-                    'bbox': box
-                }
-                detections.append(detection)
-
+        for r in results:
+            boxes = r.boxes
+            for box in boxes:
+                # Get the box coordinates, confidence and class
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = box.conf.cpu().numpy()[0]
+                cls = int(box.cls.cpu().numpy()[0])
+                
+                if conf > 0.5 and cls in self.classes:
+                    detection = {
+                        'class': self.classes[cls],
+                        'confidence': float(conf),
+                        'bbox': np.array([x1, y1, x2, y2])
+                    }
+                    detections.append(detection)
+        
         return detections
 
     def draw_detections(self, image: np.ndarray, detections: List[Dict]) -> np.ndarray:
@@ -142,89 +125,87 @@ class VehicleDetector:
 
     def process_video(self, video_path: str, output_path: Optional[str] = None):
         """
-        Process a video with batch processing and parallel streams
+        Process a video using YOLO's built-in video processing
         """
-        cap = cv2.VideoCapture(video_path)
-        if not cap.isOpened():
-            print(f"Error: Could not open video at {video_path}")
-            return
-
-        if output_path:
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_path, fourcc, 20.0,
-                                (int(cap.get(3)), int(cap.get(4))))
-
-        frames_buffer = []
-        detections_buffer = []
-        
-        while cap.isOpened():
-            # Read batch_size frames
-            for _ in range(self.batch_size):
-                ret, frame = cap.read()
-                if not ret:
-                    break
-                frames_buffer.append(frame)
-                
-            if not frames_buffer:
-                break
-                
-            # Process batch
-            if self.device.type == 'cuda':
-                # Use parallel CUDA streams
-                with self.stream1:
-                    batch_tensors = [self.preprocess_image(frame) for frame in frames_buffer]
-                    batch_input = torch.stack(batch_tensors)
-
-                with self.stream2:
-                    with torch.no_grad(), autocast():
-                        batch_predictions = self.model(batch_input)
-
-                torch.cuda.synchronize()
-            else:
-                # CPU processing
-                batch_tensors = [self.preprocess_image(frame) for frame in frames_buffer]
-                batch_input = torch.stack(batch_tensors)
-                with torch.no_grad():
-                    batch_predictions = self.model(batch_input)
+        # Process video using YOLO's built-in method
+        try:
+            results = self.model(source=video_path, stream=True)
             
-            # Process predictions
-            for frame, predictions in zip(frames_buffer, batch_predictions):
-                detections = self._process_predictions(predictions)
+            # Open video capture to get frame dimensions
+            cap = cv2.VideoCapture(video_path)
+            if not cap.isOpened():
+                print(f"Error: Could not open video at {video_path}")
+                return
+                
+            # Set up video writer if output path is provided
+            if output_path:
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(output_path, fourcc, 20.0,
+                                    (int(cap.get(3)), int(cap.get(4))))
+                
+            # Process each frame
+            for r in results:
+                frame = r.orig_img
+                detections = []
+                
+                # Extract detections
+                boxes = r.boxes
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    conf = box.conf.cpu().numpy()[0]
+                    cls = int(box.cls.cpu().numpy()[0])
+                    
+                    if conf > 0.5 and cls in self.classes:
+                        detection = {
+                            'class': self.classes[cls],
+                            'confidence': float(conf),
+                            'bbox': np.array([x1, y1, x2, y2])
+                        }
+                        detections.append(detection)
+                
+                # Draw detections on frame
                 frame_with_detections = self.draw_detections(frame, detections)
                 
                 if output_path:
                     out.write(frame_with_detections)
-                
+                    
                 cv2.imshow('Emergency Vehicle Detection', frame_with_detections)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
+                    
+            # Clean up
+            if output_path:
+                out.release()
+            cv2.destroyAllWindows()
             
-            frames_buffer.clear()
-
-        # Release the capture and close windows
-        cap.release()
-        if output_path:
-            out.release()
-        cv2.destroyAllWindows()
+        except Exception as e:
+            print(f"Error processing video: {str(e)}")
+            
+        finally:
+            if 'cap' in locals():
+                cap.release()
+            if 'out' in locals() and output_path:
+                out.release()
+            cv2.destroyAllWindows()
 
     def _process_predictions(self, prediction) -> List[Dict]:
         """Process model predictions with optimized tensor operations"""
         detections = []
         if self.device.type == 'cuda':
-            boxes = prediction['boxes'].cpu().numpy()
-            scores = prediction['scores'].cpu().numpy()
-            labels = prediction['labels'].cpu().numpy()
+            boxes = prediction[0].boxes.xyxy.cpu().numpy()
+            scores = prediction[0].boxes.conf.cpu().numpy()
+            labels = prediction[0].boxes.cls.cpu().numpy()
         else:
-            boxes = prediction['boxes'].numpy()
-            scores = prediction['scores'].numpy()
-            labels = prediction['labels'].numpy()
+            boxes = prediction[0].boxes.xyxy.numpy()
+            scores = prediction[0].boxes.conf.numpy()
+            labels = prediction[0].boxes.cls.numpy()
 
         # Vectorized filtering
         mask = scores > 0.5
         boxes = boxes[mask]
         scores = scores[mask]
         labels = labels[mask]
-        
+
         for box, score, label in zip(boxes, scores, labels):
             if int(label) in self.classes:
                 detection = {
@@ -233,7 +214,7 @@ class VehicleDetector:
                     'bbox': box
                 }
                 detections.append(detection)
-        
+
         return detections
 
 if __name__ == "__main__":
@@ -242,7 +223,7 @@ if __name__ == "__main__":
         detector = VehicleDetector(batch_size=4)
         
         # Single image detection
-        image_path = "Dataset/test_image.jpg"
+        image_path = "backend/Dataset/images/test/45.png"
         img = cv2.imread(image_path)
         if img is not None:
             detections = detector.detect_image(img)
@@ -252,7 +233,7 @@ if __name__ == "__main__":
             cv2.destroyAllWindows()
         
         # Video detection with batch processing
-        video_path = "Dataset/test_video.mp4"
+        video_path = "backend/runs/vehicle_detection_multi/test_results/ambulance_detected.mp4"
         detector.process_video(video_path)
         
     except Exception as e:

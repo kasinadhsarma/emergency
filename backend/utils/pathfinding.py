@@ -1,10 +1,12 @@
 import osmnx as ox
 import networkx as nx
-from typing import Tuple, List, Dict
+from typing import Tuple, List, Dict, Optional
 import folium
 from dataclasses import dataclass
 from concurrent.futures import ThreadPoolExecutor
-import numpy as np
+
+ox.settings.log_console = True
+ox.settings.use_cache = True
 
 @dataclass
 class Location:
@@ -16,7 +18,6 @@ class Location:
 class PathFinder:
     def __init__(self):
         """Initialize the PathFinder with OpenStreetMap data"""
-        # Cache for graph data
         self._graph = None
         self._emergency_locations: Dict[str, List[Location]] = {
             'hospital': [],
@@ -24,14 +25,26 @@ class PathFinder:
             'police_station': []
         }
 
-    def load_area_graph(self, city: str):
-        """Load the road network graph for a specific city"""
+    def load_area_boundary(self, boundary: Dict[str, float]):
+        """Load the road network graph for a specific area boundary"""
+        required_keys = ['north', 'south', 'east', 'west']
+        if not all(key in boundary for key in required_keys):
+            raise ValueError(f"Boundary must contain {required_keys} keys")
+        
         try:
-            self._graph = ox.graph_from_place(city, network_type='drive')
+            self._graph = ox.graph_from_bbox(
+                boundary['north'],
+                boundary['south'],
+                boundary['east'],
+                boundary['west'],
+                network_type='drive',
+                simplify=True,
+                truncate_by_edge=True
+            )
             self._graph = ox.add_edge_speeds(self._graph)
             self._graph = ox.add_edge_travel_times(self._graph)
         except Exception as e:
-            raise Exception(f"Failed to load graph for {city}: {e}")
+            raise RuntimeError(f"Failed to load graph: {e}")
 
     def add_emergency_location(self, location: Location):
         """Add an emergency service location to the system"""
@@ -43,57 +56,59 @@ class PathFinder:
         """Get the nearest node in the road network to a point"""
         return ox.nearest_nodes(self._graph, lon, lat)
 
-    def _calculate_route(self, start_node: int, end_node: int,
-                        traffic_weights: Dict[int, float] = None) -> Tuple[List[int], float, Dict[int, float]]:
+    def _calculate_route(self, 
+                        start_node: int, 
+                        end_node: int,
+                        traffic_weights: Optional[Dict[int, float]] = None
+                        ) -> Tuple[Optional[List[int]], Optional[float]]:
         """Calculate the optimal route between two nodes"""
-        if traffic_weights:
-            # Apply traffic density weights to travel times
-            for edge in self._graph.edges:
-                edge_id = edge[2]
-                if edge_id in traffic_weights:
-                    self._graph.edges[edge]['weight'] = (
-                        self._graph.edges[edge]['travel_time'] *
-                        traffic_weights[edge_id]
-                    )
-                else:
-                    self._graph.edges[edge]['weight'] = self._graph.edges[edge]['travel_time']
-
         try:
+            weight = 'travel_time'
+            if traffic_weights:
+                def weight_func(u, v, d):
+                    base_time = d.get('travel_time', 1)
+                    osm_id = d.get('osmid', '')
+                    if isinstance(osm_id, list):
+                        for oid in osm_id:
+                            if oid in traffic_weights:
+                                return base_time * traffic_weights[oid]
+                        return base_time
+                    return base_time * traffic_weights.get(osm_id, 1.0)
+                weight = weight_func
+
             route = nx.shortest_path(
-                self._graph,
-                start_node,
-                end_node,
-                weight='weight'
+                self._graph, 
+                start_node, 
+                end_node, 
+                weight=weight
             )
-            route_length = sum(
-                self._graph.edges[edge]['length']
-                for edge in zip(route[:-1], route[1:])
-            )
-            return route, route_length, traffic_weights
+            
+            # Calculate route length
+            length = 0.0
+            for u, v in zip(route[:-1], route[1:]):
+                edge_data = self._graph.get_edge_data(u, v)
+                if edge_data:
+                    # Get first edge (assuming simplified graph)
+                    key = next(iter(edge_data))
+                    length += edge_data[key].get('length', 0)
+            
+            return route, length
         except nx.NetworkXNoPath:
-            return None, None, None
+            return None, None
+        except Exception as e:
+            print(f"Route calculation failed: {e}")
+            return None, None
 
     def find_optimal_route(self,
                           current_lat: float,
                           current_lon: float,
                           vehicle_type: str,
-                          traffic_weights: Dict[int, float] = None) -> Tuple[List[Tuple[float, float]], Location, Dict[int, float]]:
-        """
-        Find the optimal route to the nearest appropriate emergency service location
-
-        Args:
-            current_lat: Current latitude
-            current_lon: Current longitude
-            vehicle_type: Type of emergency vehicle ('ambulance', 'fire_engine', 'police')
-            traffic_weights: Dictionary of edge IDs to traffic density weights
-
-        Returns:
-            Tuple of (route coordinates, destination location)
-        """
+                          traffic_weights: Optional[Dict[int, float]] = None
+                          ) -> Tuple[List[Tuple[float, float]], Location]:
+        """Find optimal route to nearest appropriate emergency service"""
         if not self._graph:
-            raise ValueError("No area graph loaded. Call load_area_graph first.")
+            raise RuntimeError("No graph loaded. Call load_area_boundary first.")
 
-        # Map vehicle types to location types
         type_map = {
             'ambulance': 'hospital',
             'fire_engine': 'fire_station',
@@ -105,73 +120,72 @@ class PathFinder:
 
         locations = self._emergency_locations[location_type]
         if not locations:
-            raise ValueError(f"No {location_type}s registered in the system")
+            raise ValueError(f"No {location_type}s available")
 
         start_node = self._get_nearest_node(current_lat, current_lon)
 
-        # Find best route to each possible destination in parallel
         best_route = None
         best_length = float('inf')
         best_location = None
-        best_traffic_weights = None
-
-        def process_location(loc: Location) -> Tuple[List[int], float, Location, Dict[int, float]]:
-            end_node = self._get_nearest_node(loc.lat, loc.lon)
-            route, length, traffic_weights = self._calculate_route(start_node, end_node, traffic_weights)
-            return route, length, loc, traffic_weights
 
         with ThreadPoolExecutor() as executor:
-            futures = [
-                executor.submit(process_location, loc)
-                for loc in locations
-            ]
+            futures = []
+            for loc in locations:
+                futures.append(executor.submit(
+                    self._process_location,
+                    start_node,
+                    loc,
+                    traffic_weights
+                ))
 
             for future in futures:
-                route, length, loc, traffic_weights = future.result()
+                route, length, loc = future.result()
                 if route and length < best_length:
                     best_route = route
                     best_length = length
                     best_location = loc
-                    best_traffic_weights = traffic_weights
 
         if not best_route:
-            raise ValueError("No valid route found to any appropriate destination")
+            raise RuntimeError("No valid route found")
 
-        # Convert node IDs to coordinates
         route_coords = [
             (self._graph.nodes[node]['y'], self._graph.nodes[node]['x'])
             for node in best_route
         ]
+        return route_coords, best_location
 
-        return route_coords, best_location, best_traffic_weights
+    def _process_location(self, start_node, loc, traffic_weights):
+        end_node = self._get_nearest_node(loc.lat, loc.lon)
+        route, length = self._calculate_route(start_node, end_node, traffic_weights)
+        return route, length, loc
 
-    def visualize_route(self, route_coords: List[Tuple[float, float]],
-                       destination: Location) -> folium.Map:
+    def visualize_route(self, 
+                       route_coords: List[Tuple[float, float]], 
+                       destination: Location
+                       ) -> folium.Map:
         """Create an interactive map visualization of the route"""
-        # Create base map centered on route
-        center_lat = sum(lat for lat, _ in route_coords) / len(route_coords)
-        center_lon = sum(lon for _, lon in route_coords) / len(route_coords)
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=13)
-
-        # Draw route
+        m = folium.Map(
+            location=[route_coords[0][0], route_coords[0][1]], 
+            zoom_start=13
+        )
+        
         folium.PolyLine(
             route_coords,
-            weight=2,
             color='red',
+            weight=2.5,
             opacity=0.8
         ).add_to(m)
-
-        # Add markers for start and end points
+        
         folium.Marker(
             route_coords[0],
             popup='Start',
             icon=folium.Icon(color='green')
         ).add_to(m)
-
+        
         folium.Marker(
             [destination.lat, destination.lon],
-            popup=f'{destination.name}\n{destination.type}',
-            icon=folium.Icon(color='red')
+            popup=f'{destination.name} ({destination.type})',
+            icon=folium.Icon(color='blue')
         ).add_to(m)
-
+        
         return m

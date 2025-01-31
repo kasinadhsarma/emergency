@@ -6,6 +6,9 @@ from typing import List, Dict, Tuple, Generator, Optional
 import numpy as np
 from dataclasses import dataclass
 import time
+from PIL import Image
+from torchvision import models
+
 
 @dataclass
 class Detection:
@@ -38,8 +41,18 @@ class VehicleDetector:
         Returns:
             List of Detection objects
         """
+        # Preprocess the frame
+        frame_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        image = Image.fromarray(frame_rgb)
+        transform = models.resnet50(pretrained=True).transforms()
+        image_tensor = transform(image).unsqueeze(0)  # Add batch dimension
+
         # Run inference
-        results = self.model(frame, device=self.device)
+        results = self.model(image_tensor, device=self.device)
+
+        # Check the shape and type of the input tensor
+        print(image_tensor.shape)  # Should be [1, 3, H, W]
+        print(image_tensor.dtype)  # Should be torch.float32
         
         # Process detections
         detections = []
@@ -72,18 +85,30 @@ class VehicleDetector:
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
             raise ValueError(f"Could not open video at {video_path}")
-            
+
         frame_count = 0
+        frame_skip = 5  # Process every 5th frame
         while True:
             ret, frame = cap.read()
             if not ret:
                 break
-                
+
+            # Skip frames
+            if frame_count % frame_skip != 0:
+                frame_count += 1
+                continue
+
+            # Display the frame (for debugging)
+            cv2.imshow("Frame", frame)
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+
             detections = self.detect_frame(frame, frame_count)
             yield detections
             frame_count += 1
-            
+
         cap.release()
+        cv2.destroyAllWindows()
 
     def process_video_with_visualization(self, 
                                       video_path: str, 

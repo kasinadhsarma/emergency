@@ -201,7 +201,7 @@ def process_image(img_path, model, output_path):
 
 def main():
     # Load the trained model
-    model_path = Path('backend/runs/vehicle_detection_multi/weights/best.pt')
+    model_path = Path('backend/models/vehicle_detection_final.pt')
     if not model_path.exists():
         print(f"Error: Model not found at {model_path}")
         return
