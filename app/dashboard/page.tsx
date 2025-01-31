@@ -12,7 +12,7 @@ import {
   Phone, MapPin, Clock, BellRing, FileText, Upload, Camera, Video
 } from "lucide-react"
 import Map from "@/components/Map"
-import { getEmergencyLocations, getRequests, getVehicles, getStations } from "@/lib/api"
+import { getEmergencyLocations, getRequests, getVehicles, getStations, detectEmergencyInImage, detectEmergencyInVideo } from "@/lib/api"
 
 // Enums for better type safety
 enum EmergencyType {
@@ -246,78 +246,16 @@ export default function UserDashboard() {
   const [detectionResults, setDetectionResults] = useState<DetectionResponse | null>(null);
   const [modelError, setModelError] = useState<string | null>(null);
 
-  // Initialize ML model
-  useEffect(() => {
-    const initializeModel = async () => {
-      try {
-        setModelStatus('initializing');
-        setModelError(null);
-
-        // First check if backend is available
-        const healthCheck = await fetch("/api/health").catch(() => null);
-        if (!healthCheck?.ok) {
-          throw new Error("Backend service unavailable");
-        }
-
-        const response = await fetch("/api/init-model", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            modelConfig: {
-              confidenceThreshold: 0.4, // Lower threshold for better detection
-              nmsThreshold: 0.45,
-              modelVersion: "v2.1",
-              enableGPU: true
-            }
-          })
-        });
-
-        if (!response.ok) {
-          const error = await response.text();
-          throw new Error(error || "Failed to initialize model");
-        }
-
-        setModelStatus('ready');
-        setModelInitialized(true);
-      } catch (error) {
-        console.error("Error initializing model:", error);
-        setModelStatus('error');
-        setModelError(error instanceof Error ? error.message : "Failed to initialize model");
-      }
-    };
-
-    initializeModel();
-  }, []);
-
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (modelStatus !== 'ready') {
-      alert("Please wait for the model to initialize");
-      return;
-    }
 
     setIsProcessing(true);
     setUploadProgress(0);
     setDetectionResults(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
-
     try {
-      // First, detect emergency vehicles in the image
-      const response = await fetch("/detect/image", {
-        method: "POST",
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to process image");
-      }
-
-      const detectionResults: DetectionResponse = await response.json();
+      const detectionResults = await detectEmergencyInImage(file);
       setDetectionResults(detectionResults);
 
       // Process emergency type based on detections
@@ -386,63 +324,68 @@ export default function UserDashboard() {
   const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (modelStatus !== 'ready') {
-      alert("Please wait for the model to initialize");
-      return;
-    }
 
     setIsProcessing(true);
     setUploadProgress(0);
     setDetectionResults(null);
 
-    const formData = new FormData();
-    formData.append("file", file);
-    formData.append("settings", JSON.stringify({
-      enhanceImage: true,
-      detectObjects: true,
-      detectFaces: true,
-      detectText: true,
-      processMetadata: true
-    }));
-
     try {
-      const xhr = new XMLHttpRequest();
-      xhr.upload.addEventListener("progress", (event) => {
-        if (event.lengthComputable) {
-          const progress = Math.round((event.loaded / event.total) * 100);
-          setUploadProgress(progress);
+      const detectionResults = await detectEmergencyInVideo(file);
+      setDetectionResults(detectionResults);
+
+      // Process emergency type based on detections
+      let emergencyType: EmergencyType | null = null;
+      const detection = detectionResults.detections[0]; // Get first detection
+
+      if (detection) {
+        switch (detection.class_name.toLowerCase()) {
+          case "ambulance":
+            emergencyType = EmergencyType.Medical;
+            break;
+          case "fire engine":
+            emergencyType = EmergencyType.Fire;
+            break;
+          case "police":
+            emergencyType = EmergencyType.Police;
+            break;
         }
-      });
 
-      const response = await new Promise((resolve, reject) => {
-        xhr.onload = () => resolve(xhr.response);
-        xhr.onerror = () => reject(xhr.statusText);
-        xhr.open("POST", "/api/enhanced-detection");
-        xhr.responseType = "json";
-        xhr.send(formData);
-      });
+        // If emergency vehicle detected, automatically trigger emergency dialog
+        if (emergencyType) {
+          setSelectedEmergency(emergencyType);
 
-      if (!response) {
-        throw new Error("Failed to process video");
-      }
+          // Create emergency request
+          const newRequest: Partial<EmergencyRequest> = {
+            type: emergencyType,
+            status: RequestStatus.Pending,
+            location: [77.5946, 12.9716], // Default location - should be obtained from device
+            address: "Current Location", // Should be obtained from geocoding
+            description: `Emergency ${detection.class_name} detected with ${(detection.confidence * 100).toFixed(1)}% confidence`,
+            timestamp: new Date().toISOString()
+          };
 
-      setDetectionResults(response as DetectionResponse);
+          try {
+            const requestResponse = await fetch("/api/requests", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(newRequest),
+            });
 
-      // Trigger model improvement based on results
-      await fetch("/api/improve-model", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          results: response,
-          feedback: {
-            accuracy: true,
-            falsePositives: [],
-            falseNegatives: []
+            if (!requestResponse.ok) {
+              throw new Error("Failed to create emergency request");
+            }
+
+            // Update requests list
+            const newRequestData = await requestResponse.json();
+            setRequests(prev => [...prev, newRequestData]);
+
+          } catch (error) {
+            console.error("Error creating emergency request:", error);
           }
-        })
-      });
+        }
+      }
 
     } catch (error) {
       console.error("Error processing video:", error);
