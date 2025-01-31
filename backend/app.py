@@ -17,7 +17,7 @@ from utils.detection import VehicleDetector
 from utils.pathfinding import PathFinder, Location
 
 # Initialize components
-detector = VehicleDetector(model_path='runs/vehicle_detection_multi4/weights/best.pt')
+detector = VehicleDetector(model_path='yolov8n.pt')
 pathfinder = PathFinder()
 
 # Load emergency locations for Rajahmundry
@@ -131,6 +131,25 @@ class Detection(BaseModel):
     frame_number: Optional[int] = None
     timestamp: Optional[float] = None
 
+# Model initialization endpoint
+@app.post("/api/init-model")
+async def init_model(
+    modelConfig: dict = {
+        "confidenceThreshold": 0.4,
+        "nmsThreshold": 0.45,
+        "modelVersion": "v2.1",
+        "enableGPU": True
+    }
+):
+    """Initialize the ML model with given configuration"""
+    try:
+        # Update model configuration
+        detector.model.conf = modelConfig.get("confidenceThreshold", 0.4)
+        detector.model.iou = modelConfig.get("nmsThreshold", 0.45)
+        return {"status": "ok", "message": "Model initialized successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 # Detection endpoints
 @app.post("/detect/image")
 async def detect_image(file: UploadFile = File(...)):
@@ -210,6 +229,12 @@ async def find_route(request: RouteRequest):
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Health check endpoint
+@app.get("/api/health")
+async def health_check():
+    """Health check endpoint"""
+    return {"status": "ok", "timestamp": datetime.now().isoformat()}
 
 # API endpoints
 @app.get("/api/locations")

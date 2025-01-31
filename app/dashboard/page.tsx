@@ -9,7 +9,7 @@ import { Progress } from "@/components/ui/progress"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import {
   PhoneCall, Siren, ShieldAlert, History, Settings, Maximize2,
-  Phone, MapPin, Clock, BellRing, FileText
+  Phone, MapPin, Clock, BellRing, FileText, Upload, Camera, Video
 } from "lucide-react"
 import Map from "@/components/Map"
 import { getEmergencyLocations, getRequests, getVehicles, getStations } from "@/lib/api"
@@ -234,28 +234,6 @@ export default function UserDashboard() {
     fetchEmergencyData();
   }, []);
 
-useEffect(() => {
-  const fetchEmergencyData = async () => {
-    try {
-      const [locations, requests, vehicles, stations] = await Promise.all([
-        getEmergencyLocations(),
-        getRequests(),
-        getVehicles(),
-        getStations()
-      ]);
-
-      setEmergencyLocations(locations);
-      setRequests(requests);
-      setVehicles(vehicles);
-      setStations(stations);
-    } catch (error) {
-      console.error("Error fetching emergency data:", error);
-    }
-  };
-
-  fetchEmergencyData();
-}, []);
-
   const handleEmergencyClick = (type: EmergencyType) => {
     setSelectedEmergency(type);
   };
@@ -314,18 +292,18 @@ useEffect(() => {
   }, []);
 
   const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-  const file = event.target.files?.[0];
-  if (!file) return;
-  if (modelStatus !== 'ready') {
-    alert("Please wait for the model to initialize");
-    return;
-  }
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (modelStatus !== 'ready') {
+      alert("Please wait for the model to initialize");
+      return;
+    }
 
-  setIsProcessing(true);
-  setUploadProgress(0);
-  setDetectionResults(null);
+    setIsProcessing(true);
+    setUploadProgress(0);
+    setDetectionResults(null);
 
-  const formData = new FormData();
+    const formData = new FormData();
     formData.append("file", file);
 
     try {
@@ -695,77 +673,112 @@ useEffect(() => {
                       <MapPin className="mr-2 h-4 w-4" />
                       Saved Locations
                     </Button>
-<input
-  type="file"
-  accept="image/*"
-  onChange={handleImageUpload}
-  className="hidden"
-  id="image-upload"
-  disabled={isProcessing || !modelInitialized}
-/>
-<label htmlFor="image-upload">
-  <Button
-    className={`w-full ${modelStatus === 'error' ? 'bg-red-50' : ''}`}
-    variant="outline"
-    disabled={isProcessing || !modelInitialized}
-  >
-    <FileText className="mr-2 h-4 w-4" />
-    {isProcessing
-      ? `Processing (${uploadProgress}%)`
-      : modelStatus === 'ready'
-        ? "Scan Emergency"
-        : modelStatus === 'initializing'
-          ? "Initializing..."
-          : `Model Error: ${modelError || 'Unknown error'}`}
-  </Button>
-</label>
+                    <Card className="shadow-lg">
+                      <CardHeader>
+                        <CardTitle className="text-indigo-600">Media Upload</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                              <input
+                                type="file"
+                                accept="image/*"
+                                onChange={handleImageUpload}
+                                className="hidden"
+                                id="image-upload"
+                                disabled={isProcessing || !modelInitialized}
+                              />
+                              <label htmlFor="image-upload" className="block">
+                                <Button
+                                  className="w-full h-32 border-2 border-dashed border-gray-300 hover:border-indigo-500 bg-white hover:bg-gray-50"
+                                  variant="outline"
+                                  disabled={isProcessing || !modelInitialized}
+                                >
+                                  <div className="flex flex-col items-center space-y-2">
+                                    <Camera className="h-8 w-8 text-indigo-600" />
+                                    <span className="text-sm font-medium text-gray-600">
+                                      {isProcessing
+                                        ? `Processing Image (${uploadProgress}%)`
+                                        : "Upload Image"}
+                                    </span>
+                                  </div>
+                                </Button>
+                              </label>
+                            </div>
 
-{modelStatus === 'error' && (
-  <div className="mt-2 p-2 text-sm text-red-600 bg-red-50 rounded-md">
-    {modelError || 'Failed to initialize detection model. Please try refreshing the page.'}
-  </div>
-)}
+                            <div>
+                              <input
+                                type="file"
+                                accept="video/*"
+                                onChange={handleVideoUpload}
+                                className="hidden"
+                                id="video-upload"
+                                disabled={isProcessing || !modelInitialized}
+                              />
+                              <label htmlFor="video-upload" className="block">
+                                <Button
+                                  className="w-full h-32 border-2 border-dashed border-gray-300 hover:border-indigo-500 bg-white hover:bg-gray-50"
+                                  variant="outline"
+                                  disabled={isProcessing || !modelInitialized}
+                                >
+                                  <div className="flex flex-col items-center space-y-2">
+                                    <Video className="h-8 w-8 text-indigo-600" />
+                                    <span className="text-sm font-medium text-gray-600">
+                                      {isProcessing
+                                        ? `Processing Video (${uploadProgress}%)`
+                                        : "Upload Video"}
+                                    </span>
+                                  </div>
+                                </Button>
+                              </label>
+                            </div>
+                          </div>
 
-{modelStatus === 'initializing' && (
-  <div className="mt-2 p-2 text-sm text-blue-600 bg-blue-50 rounded-md">
-    Initializing emergency detection model...
-  </div>
-)}
+                          {modelStatus === 'error' && (
+                            <div className="mt-2 p-2 text-sm text-red-600 bg-red-50 rounded-md">
+                              {modelError || 'Failed to initialize detection model. Please try refreshing the page.'}
+                            </div>
+                          )}
 
-{detectionResults && detectionResults.detections.length > 0 && (
-  <div className="mt-2 p-3 bg-gray-50 rounded-md">
-    <h4 className="text-sm font-medium text-gray-900">Detection Results:</h4>
-    {detectionResults.detections.map((det, idx) => (
-      <div key={idx} className="text-sm text-gray-600">
-        {det.class_name}: {(det.confidence * 100).toFixed(1)}% confidence
-      </div>
-    ))}
-  </div>
-)}
-<input
-  type="file"
-  accept="video/*"
-  onChange={handleVideoUpload}
-  className="hidden"
-  id="video-upload"
-  disabled={isProcessing || !modelInitialized}
-/>
-<label htmlFor="video-upload">
-  <Button
-    className="w-full mt-2"
-    variant="outline"
-    disabled={isProcessing || !modelInitialized}
-  >
-    <FileText className="mr-2 h-4 w-4" />
-    {isProcessing
-      ? `Processing (${uploadProgress}%)`
-      : modelStatus === 'ready'
-        ? "Upload Video"
-        : modelStatus === 'initializing'
-          ? "Initializing..."
-          : "Model Error"}
-  </Button>
-</label>
+                          {modelStatus === 'initializing' && (
+                            <div className="mt-2 p-2 text-sm text-blue-600 bg-blue-50 rounded-md">
+                              Initializing emergency detection model...
+                            </div>
+                          )}
+
+                          {detectionResults && detectionResults.detections.length > 0 && (
+                            <Card>
+                              <CardHeader>
+                                <CardTitle className="text-sm">Detection Results</CardTitle>
+                              </CardHeader>
+                              <CardContent>
+                                <div className="space-y-2">
+                                  {detectionResults.detections.map((det, idx) => (
+                                    <div key={idx} className="flex justify-between items-center">
+                                      <span className="text-sm font-medium">{det.class_name}</span>
+                                      <Badge variant="secondary">
+                                        {(det.confidence * 100).toFixed(1)}% confidence
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              </CardContent>
+                            </Card>
+                          )}
+
+                          {isProcessing && (
+                            <div className="space-y-2">
+                              <div className="flex justify-between text-sm">
+                                <span>Upload Progress</span>
+                                <span>{uploadProgress}%</span>
+                              </div>
+                              <Progress value={uploadProgress} className="h-2" />
+                            </div>
+                          )}
+                        </div>
+                      </CardContent>
+                    </Card>
                   </div>
                 </CardContent>
               </Card>

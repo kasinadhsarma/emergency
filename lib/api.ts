@@ -1,4 +1,15 @@
-const API_BASE_URL = 'http://localhost:8000';
+export const API_BASE_URL = 'http://localhost:8000';
+
+// Health Check
+export const checkBackendHealth = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/health`);
+    if (!response.ok) throw new Error('Backend health check failed');
+    return response.json();
+  } catch (error) {
+    throw new Error('Backend service unavailable');
+  }
+};
 
 // User Profile
 export const getUserProfile = async () => {

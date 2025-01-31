@@ -30,7 +30,7 @@ class PathFinder:
         required_keys = ['north', 'south', 'east', 'west']
         if not all(key in boundary for key in required_keys):
             raise ValueError(f"Boundary must contain {required_keys} keys")
-        
+
         try:
             self._graph = ox.graph_from_bbox(
                 boundary['north'],
@@ -56,8 +56,8 @@ class PathFinder:
         """Get the nearest node in the road network to a point"""
         return ox.nearest_nodes(self._graph, lon, lat)
 
-    def _calculate_route(self, 
-                        start_node: int, 
+    def _calculate_route(self,
+                        start_node: int,
                         end_node: int,
                         traffic_weights: Optional[Dict[int, float]] = None
                         ) -> Tuple[Optional[List[int]], Optional[float]]:
@@ -77,12 +77,12 @@ class PathFinder:
                 weight = weight_func
 
             route = nx.shortest_path(
-                self._graph, 
-                start_node, 
-                end_node, 
+                self._graph,
+                start_node,
+                end_node,
                 weight=weight
             )
-            
+
             # Calculate route length
             length = 0.0
             for u, v in zip(route[:-1], route[1:]):
@@ -91,7 +91,7 @@ class PathFinder:
                     # Get first edge (assuming simplified graph)
                     key = next(iter(edge_data))
                     length += edge_data[key].get('length', 0)
-            
+
             return route, length
         except nx.NetworkXNoPath:
             return None, None
@@ -159,33 +159,33 @@ class PathFinder:
         route, length = self._calculate_route(start_node, end_node, traffic_weights)
         return route, length, loc
 
-    def visualize_route(self, 
-                       route_coords: List[Tuple[float, float]], 
+    def visualize_route(self,
+                       route_coords: List[Tuple[float, float]],
                        destination: Location
                        ) -> folium.Map:
         """Create an interactive map visualization of the route"""
         m = folium.Map(
-            location=[route_coords[0][0], route_coords[0][1]], 
+            location=[route_coords[0][0], route_coords[0][1]],
             zoom_start=13
         )
-        
+
         folium.PolyLine(
             route_coords,
             color='red',
             weight=2.5,
             opacity=0.8
         ).add_to(m)
-        
+
         folium.Marker(
             route_coords[0],
             popup='Start',
             icon=folium.Icon(color='green')
         ).add_to(m)
-        
+
         folium.Marker(
             [destination.lat, destination.lon],
             popup=f'{destination.name} ({destination.type})',
             icon=folium.Icon(color='blue')
         ).add_to(m)
-        
+
         return m
