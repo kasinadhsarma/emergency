@@ -27,4 +27,5 @@ yarn-error.log*
 next-env.d.ts
 
 Dataset/
-data/
+data/yolov8x.pt
+yolov8x.pt
