@@ -446,13 +446,13 @@ const UserDashboard: React.FC = () => {
                         <div className="flex justify-between">
                           <span>Status:</span>
                           <Badge className={detectionResults.emergencyDetected ? "bg-red-400" : "bg-green-400"}>
-                            {detectionResults.emergencyDetected ? "Emergency" : "Clear"}
+                            {detectionResults.status}
                           </Badge>
                         </div>
                         {detectionResults.emergencyType && (
                           <div className="flex justify-between">
                             <span>Type:</span>
-                            <Badge>{detectionResults.emergencyType}</Badge>
+                            <Badge>{detectionResults.type}</Badge>
                           </div>
                         )}
                         {detectionResults.confidence && (
@@ -461,11 +461,11 @@ const UserDashboard: React.FC = () => {
                             <Badge>{`${(detectionResults.confidence * 100).toFixed(1)}%`}</Badge>
                           </div>
                         )}
-                        {detectionResults.detections.length > 0 && (
+                        {detectionResults.detectedVehicles && (
                           <div className="flex justify-between">
                             <span>Detected Vehicles:</span>
                             <Badge>
-                              {detectionResults.detections.map(det => det.class_name).join(', ')}
+                              {detectionResults.detectedVehicles}
                             </Badge>
                           </div>
                         )}
