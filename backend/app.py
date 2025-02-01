@@ -118,7 +118,7 @@ async def process_and_encode_image(filepath: str, detections: list) -> str:
         for det in detections:
             bbox = det['bbox']
             conf = det['confidence']
-            class_name = det['class']
+            class_name = det['class_name']
             
             # Draw box
             cv2.rectangle(img, 
@@ -193,7 +193,6 @@ async def detect_video(
         # Process results
         emergency_detected = len(detections) > 0
         max_confidence = max((d['confidence'] for d in detections), default=0.0)
-        detected_vehicles = [d['class'] for d in detections]  # Using 'class' instead of 'class_name'
         
         # Schedule cleanup
         background_tasks.add_task(cleanup_file, filepath)
@@ -207,9 +206,7 @@ async def detect_video(
                 "confidence": max_confidence,
                 "emergencyType": "MEDICAL" if emergency_detected else None,
                 "timestamp": datetime.now().isoformat(),
-                "processedImage": processed_image,
-                "detectedVehicles": detected_vehicles,  # Add detected vehicles to response
-                "status": "Emergency" if emergency_detected else "Clear"
+                "processedImage": processed_image  # Add processed image to response
             }
         )
     except Exception as e:
@@ -218,7 +215,7 @@ async def detect_video(
             background_tasks.add_task(cleanup_file, filepath)
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.post("/api/detect/image", status_code=200)  # Explicitly set status code
+@app.post("/api/detect/image")
 async def detect_image(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...)
@@ -243,26 +240,39 @@ async def detect_image(
         # Process image and get base64
         processed_image = await process_and_encode_image(filepath, detections)
 
-        # Process results
-        emergency_detected = len(detections) > 0
-        max_confidence = max((d['confidence'] for d in detections), default=0.0)
-        detected_vehicles = [d['class'] for d in detections]
+        # Get actual vehicle type and confidence from detections
+        vehicles_detected = [d['class_name'] for d in detections]
+        max_confidence = max((d['confidence'] for d in detections), default=0.0) * 100
 
-        # Schedule cleanup
-        background_tasks.add_task(cleanup_file, filepath)
+        # Map vehicle types to emergency types
+        vehicle_to_emergency = {
+            'Police': 'POLICE',
+            'Ambulance': 'MEDICAL',
+            'Fire_Engine': 'FIRE'
+        }
+
+        emergency_type = None
+        emergency_detected = False
+
+        # Check for emergency vehicles
+        for vehicle in vehicles_detected:
+            if vehicle in vehicle_to_emergency:
+                emergency_detected = True
+                emergency_type = vehicle_to_emergency[vehicle]
+                break
 
         return JSONResponse(
             status_code=200,
             content={
-                "status": "success",
+                "status": "Emergency" if emergency_detected else "Clear",
                 "emergencyDetected": emergency_detected,
                 "detections": detections,
                 "confidence": max_confidence,
-                "emergencyType": "EMERGENCY_VEHICLE" if emergency_detected else None,
+                "emergencyType": emergency_type,
+                "type": emergency_type,
                 "timestamp": datetime.now().isoformat(),
-                "processedImage": processed_image,  # Add processed image to response
-                "detectedVehicles": detected_vehicles,  # Add detected vehicles to response
-                "status": "Emergency" if emergency_detected else "Clear"
+                "processedImage": processed_image,
+                "detectedVehicles": ", ".join(vehicles_detected) if vehicles_detected else ""
             }
         )
 

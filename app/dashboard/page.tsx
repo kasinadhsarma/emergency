@@ -440,37 +440,41 @@ const UserDashboard: React.FC = () => {
                     )}
                   </div>
                   {detectionResults && (
-                    <div className="p-4 bg-gray-50 rounded-lg">
-                      <h3 className="font-semibold mb-2">Detection Summary</h3>
-                      <div className="space-y-2">
-                        <div className="flex justify-between">
-                          <span>Status:</span>
-                          <Badge className={detectionResults.emergencyDetected ? "bg-red-400" : "bg-green-400"}>
-                            {detectionResults.status}
-                          </Badge>
-                        </div>
-                        {detectionResults.emergencyType && (
-                          <div className="flex justify-between">
-                            <span>Type:</span>
-                            <Badge>{detectionResults.type}</Badge>
-                          </div>
-                        )}
-                        {detectionResults.confidence && (
-                          <div className="flex justify-between">
-                            <span>Confidence:</span>
-                            <Badge>{`${detectionResults.confidence.toFixed(1)}%`}</Badge>
-                          </div>
-                        )}
-                        {detectionResults.detectedVehicles && (
-                          <div className="flex justify-between">
-                            <span>Detected Vehicles:</span>
-                            <Badge>
-                              {detectionResults.detectedVehicles}
-                            </Badge>
-                          </div>
-                        )}
-                      </div>
-                    </div>
+<div className="p-4 bg-gray-50 rounded-lg">
+  <h3 className="font-semibold mb-2">Detection Summary</h3>
+  <div className="space-y-2">
+    <div className="flex justify-between">
+      <span>Status:</span>
+      <Badge
+        className={
+          detectionResults.emergencyDetected
+            ? "bg-red-400"
+            : "bg-green-400"
+        }
+      >
+        {detectionResults.emergencyDetected ? "Emergency" : "Clear"}
+      </Badge>
+    </div>
+    {detectionResults.type && (
+      <div className="flex justify-between">
+        <span>Type:</span>
+        <Badge>{detectionResults.type}</Badge>
+      </div>
+    )}
+    <div className="flex justify-between">
+      <span>Confidence:</span>
+      <Badge>{`${Math.max(0, detectionResults.confidence || 0).toFixed(1)}%`}</Badge>
+    </div>
+    {detectionResults.detectedVehicles && (
+      <div className="flex justify-between">
+        <span>Detected Vehicles:</span>
+        <Badge className="text-wrap">
+          {detectionResults.detectedVehicles || 'None detected'}
+        </Badge>
+      </div>
+    )}
+  </div>
+</div>
                   )}
                 </CardContent>
               </Card>

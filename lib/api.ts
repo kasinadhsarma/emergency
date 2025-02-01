@@ -47,9 +47,8 @@ export const detectEmergencyInVideo = async (file: File): Promise<DetectionRespo
 };
 
 export const detectEmergencyInImage = async (file: File): Promise<DetectionResponse> => {
-  // Create a URL for the original image preview
   const originalImageUrl = URL.createObjectURL(file);
-  
+
   const formData = new FormData();
   formData.append('file', file);
 
@@ -61,22 +60,27 @@ export const detectEmergencyInImage = async (file: File): Promise<DetectionRespo
   if (!response.ok) {
     throw new Error('Failed to detect emergency in image');
   }
-  
+
   const result = await response.json();
-  
-  // Process detection results to match backend format
+
+  // Process detection results
   const detections = result.detections || [];
-  const emergencyDetected = detections.some((det: Detection) => 
-    ['Ambulance', 'Fire_Engine', 'Police'].includes(det.class_name)
+  const emergencyDetected = result.emergencyDetected || detections.some(det =>
+    ['Police', 'Ambulance', 'Fire_Engine'].includes(det.class_name)
   );
-  
+
+  // Get emergency type and status
+  const emergencyType = result.emergencyType || (
+    emergencyDetected ? detections[0]?.class_name || 'EMERGENCY_VEHICLE' : undefined
+  );
+
   return {
     ...result,
     originalImage: originalImageUrl,
     status: emergencyDetected ? "Emergency" : "Clear",
-    type: emergencyDetected ? "EMERGENCY_VEHICLE" : undefined,
-    confidence: Math.max(...detections.map((det: Detection) => det.confidence * 100) || [0]),
-    detectedVehicles: detections.map((det: Detection) => det.class_name).join(', '),
+    type: emergencyType,
+    confidence: Math.max(0, result.confidence || 0),
+    detectedVehicles: result.detectedVehicles || detections.map(det => det.class_name).join(', '),
     emergencyDetected,
     detections
   };
