@@ -28,6 +28,7 @@ const UserDashboard: React.FC = () => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [modelInitialized, setModelInitialized] = useState<boolean>(false);
   const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [modelError, setModelError] = useState<string | null>(null);
   const [stations, setStations] = useState<StationData>({
     ambulanceStations: [] as StationLocation[],
     fireStations: [] as StationLocation[],
@@ -57,6 +58,7 @@ const UserDashboard: React.FC = () => {
       } catch (error) {
         console.error("Error initializing stations:", error);
         setModelInitialized(false);
+        setModelError("Failed to initialize stations");
       } finally {
         setIsInitializing(false);
       }
@@ -76,6 +78,7 @@ const UserDashboard: React.FC = () => {
 
     setIsProcessing(true);
     setDetectionResults(null);
+    setModelError(null);
 
     try {
       const results = await detectEmergencyInVideo(file);
@@ -89,7 +92,7 @@ const UserDashboard: React.FC = () => {
       }
     } catch (error) {
       console.error("Error processing video:", error);
-      alert(
+      setModelError(
         error instanceof Error
           ? error.message
           : typeof error === "string"
@@ -113,6 +116,7 @@ const UserDashboard: React.FC = () => {
 
     setIsProcessing(true);
     setDetectionResults(null);
+    setModelError(null);
 
     try {
       const results = await detectEmergencyInImage(file);
@@ -126,7 +130,7 @@ const UserDashboard: React.FC = () => {
       }
     } catch (error) {
       console.error("Error processing image:", error);
-      alert(
+      setModelError(
         error instanceof Error
           ? error.message
           : typeof error === "string"
@@ -148,7 +152,7 @@ const UserDashboard: React.FC = () => {
     }
     return (
       <Badge variant="outline" className={color}>
-        {isInitializing ? "Initializing..." : modelInitialized ? "Ready" : "Error"}
+        {isInitializing ? "Initializing..." : modelError ? `Error: ${modelError}` : modelInitialized ? "Ready" : "Error"}
       </Badge>
     );
   };
