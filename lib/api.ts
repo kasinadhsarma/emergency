@@ -27,9 +27,22 @@ export const detectEmergencyInVideo = async (file: File): Promise<DetectionRespo
   }
   
   const result = await response.json();
+  
+  // Process detection results to match backend format
+  const detections = result.detections || [];
+  const emergencyDetected = detections.some((det: Detection) => 
+    ['Ambulance', 'Fire_Engine', 'Police'].includes(det.class_name)
+  );
+  
   return {
     ...result,
-    originalImage: originalVideoUrl
+    originalImage: originalVideoUrl,
+    status: emergencyDetected ? "Emergency" : "Clear",
+    type: emergencyDetected ? "EMERGENCY_VEHICLE" : undefined,
+    confidence: Math.max(...detections.map((det: Detection) => det.confidence * 100) || [0]),
+    detectedVehicles: detections.map((det: Detection) => det.class_name).join(', '),
+    emergencyDetected,
+    detections
   };
 };
 
@@ -50,13 +63,22 @@ export const detectEmergencyInImage = async (file: File): Promise<DetectionRespo
   }
   
   const result = await response.json();
+  
+  // Process detection results to match backend format
+  const detections = result.detections || [];
+  const emergencyDetected = detections.some((det: Detection) => 
+    ['Ambulance', 'Fire_Engine', 'Police'].includes(det.class_name)
+  );
+  
   return {
     ...result,
     originalImage: originalImageUrl,
-    status: result.emergencyDetected ? "Emergency" : "Clear",
-    type: result.emergencyType,
-    confidence: result.confidence,
-    detectedVehicles: result.detections.map(det => det.class_name).join(', ')
+    status: emergencyDetected ? "Emergency" : "Clear",
+    type: emergencyDetected ? "EMERGENCY_VEHICLE" : undefined,
+    confidence: Math.max(...detections.map((det: Detection) => det.confidence * 100) || [0]),
+    detectedVehicles: detections.map((det: Detection) => det.class_name).join(', '),
+    emergencyDetected,
+    detections
   };
 };
 

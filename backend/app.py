@@ -118,7 +118,7 @@ async def process_and_encode_image(filepath: str, detections: list) -> str:
         for det in detections:
             bbox = det['bbox']
             conf = det['confidence']
-            class_name = det['class_name']
+            class_name = det['class']
             
             # Draw box
             cv2.rectangle(img, 
@@ -193,6 +193,7 @@ async def detect_video(
         # Process results
         emergency_detected = len(detections) > 0
         max_confidence = max((d['confidence'] for d in detections), default=0.0)
+        detected_vehicles = [d['class'] for d in detections]  # Using 'class' instead of 'class_name'
         
         # Schedule cleanup
         background_tasks.add_task(cleanup_file, filepath)
@@ -206,7 +207,8 @@ async def detect_video(
                 "confidence": max_confidence,
                 "emergencyType": "MEDICAL" if emergency_detected else None,
                 "timestamp": datetime.now().isoformat(),
-                "processedImage": processed_image  # Add processed image to response
+                "processedImage": processed_image,
+                "detectedVehicles": detected_vehicles  # Add detected vehicles to response
             }
         )
     except Exception as e:
@@ -243,7 +245,7 @@ async def detect_image(
         # Process results
         emergency_detected = len(detections) > 0
         max_confidence = max((d['confidence'] for d in detections), default=0.0)
-        detected_vehicles = [d['class_name'] for d in detections]
+        detected_vehicles = [d['class'] for d in detections]
 
         # Schedule cleanup
         background_tasks.add_task(cleanup_file, filepath)

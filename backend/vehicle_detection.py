@@ -44,7 +44,7 @@ class VehicleDetector:
             self.model = YOLO('backend/runs/vehicle_detection_multi3/weights/best.pt')
             
             # Define class names from our custom dataset
-            self.classes = {0: 'ambulance', 1: 'police', 2: 'firetruck'}
+            self.classes = {0: 'AMBULANCE', 1: 'POLICE', 2: 'FIRE_ENGINE'}
             
             # Set model to evaluation mode
             self.model.eval()

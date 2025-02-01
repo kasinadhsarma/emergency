@@ -38,7 +38,7 @@ class EmergencyVehicleDetector:
         for r in results.boxes.data.tolist():
             x1, y1, x2, y2, conf, cls = r
             detection = {
-                'class_name': results.names[int(cls)],
+                'class': results.names[int(cls)].upper(),  # Ensure uppercase for consistency
                 'confidence': round(float(conf), 3),
                 'bbox': [int(x1), int(y1), int(x2), int(y2)]
             }
