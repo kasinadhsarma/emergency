@@ -458,7 +458,7 @@ const UserDashboard: React.FC = () => {
                         {detectionResults.confidence && (
                           <div className="flex justify-between">
                             <span>Confidence:</span>
-                            <Badge>{`${(detectionResults.confidence * 100).toFixed(1)}%`}</Badge>
+                            <Badge>{`${detectionResults.confidence.toFixed(1)}%`}</Badge>
                           </div>
                         )}
                         {detectionResults.detectedVehicles && (

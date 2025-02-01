@@ -257,10 +257,11 @@ async def detect_image(
                 "emergencyDetected": emergency_detected,
                 "detections": detections,
                 "confidence": max_confidence,
-                "emergencyType": "MEDICAL" if emergency_detected else None,
+                "emergencyType": "EMERGENCY_VEHICLE" if emergency_detected else None,
                 "timestamp": datetime.now().isoformat(),
                 "processedImage": processed_image,  # Add processed image to response
-                "detectedVehicles": detected_vehicles  # Add detected vehicles to response
+                "detectedVehicles": detected_vehicles,  # Add detected vehicles to response
+                "status": "Emergency" if emergency_detected else "Clear"
             }
         )
 
