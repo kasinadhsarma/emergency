@@ -22,6 +22,9 @@ export interface DetectionResponse {
   message?: string;
   originalImage?: string;  // Base64 or URL of original uploaded media
   processedImage?: string; // Base64 or URL of processed media with YOLO detections
+  status: string;          // Status of the detection (e.g., "Emergency" or "Clear")
+  type: EmergencyType | null; // Type of emergency detected
+  detectedVehicles: string; // List of detected vehicles
 }
 
 export interface StationLocation {
