@@ -1,598 +1,333 @@
-"use client"
+"use client";
 
-import { useState, useEffect } from "react"
-import Layout from "@/components/Layout"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Progress } from "@/components/ui/progress"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import React, { useState, useEffect } from "react";
+import Layout from '../../components/Layout';
+import { Button } from '../../components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '../../components/ui/card';
+import { Badge } from '../../components/ui/badge';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '../../components/ui/dialog';
+import { Alert, AlertDescription, AlertTitle } from '../../components/ui/alert';
 import {
-  PhoneCall, Siren, ShieldAlert, History, Settings, Maximize2,
-  Phone, MapPin, Clock, BellRing, FileText, Upload, Camera, Video
-} from "lucide-react"
-import Map from "@/components/Map"
-import { getEmergencyLocations, getRequests, getVehicles, getStations, detectEmergencyInImage, detectEmergencyInVideo } from "@/lib/api"
+  PhoneCall, ShieldAlert, History, MapPin, Upload, Video,
+  Camera, Ambulance, Truck, AlertTriangle, CheckCircle2,
+  ChevronRight, Activity
+} from "lucide-react";
+import dynamic from 'next/dynamic';
 
-// Enums for better type safety
-enum EmergencyType {
-  Medical = "Medical",
-  Fire = "Fire",
-  Police = "Police"
-}
+const Map = dynamic(() => import('../../components/Map'));
+import { getStations, detectEmergencyInVideo, detectEmergencyInImage } from '../../lib/api';
+import {
+  EmergencyType,
+  Detection,
+  DetectionResponse,
+  StationData,
+  StationLocation
+} from "../../lib/types";
 
-enum RequestStatus {
-  Pending = "Pending",
-  Dispatched = "Dispatched",
-  Completed = "Completed"
-}
+const UserDashboard: React.FC = () => {
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [modelInitialized, setModelInitialized] = useState<boolean>(false);
+  const [isInitializing, setIsInitializing] = useState<boolean>(true);
+  const [stations, setStations] = useState<StationData>({
+    ambulanceStations: [] as StationLocation[],
+    fireStations: [] as StationLocation[],
+    policeStations: [] as StationLocation[]
+  });
+  const [detectionResults, setDetectionResults] = useState<DetectionResponse | null>(null);
+  const [activeEmergency, setActiveEmergency] = useState<boolean>(false);
+  const [selectedService, setSelectedService] = useState<EmergencyType>('MEDICAL');
 
-// Interfaces with proper typing
-interface EmergencyContact {
-  type: string;
-  number: string;
-  description: string;
-  emergencyType: EmergencyType;
-}
-
-interface EmergencyRequest {
-  id: string;
-  type: EmergencyType;
-  status: RequestStatus;
-  location: [number, number];
-  address: string;
-  timestamp: string;
-  description: string;
-  responseTime?: number;
-}
-
-interface Vehicle {
-  id: string;
-  type: string;
-  location: [number, number];
-  status: string;
-  eta?: string;
-}
-
-interface Station {
-  id: string;
-  name: string;
-  location: {
-    latitude: number;
-    longitude: number;
-  };
-  address: string;
-  contact: string;
-  type: EmergencyType;
-}
-
-interface EmergencyLocation {
-  id: string;
-  type: string;
-  location: [number, number];
-  name: string;
-}
-
-// Add new interfaces for detection results
-interface Detection {
-  class_name: string;
-  confidence: number;
-  bbox: number[];
-}
-
-interface DetectionResponse {
-  detections: Detection[];
-}
-
-// Constants
-const EMERGENCY_CONTACTS: EmergencyContact[] = [
-  {
-    type: "Ambulance",
-    emergencyType: EmergencyType.Medical,
-    number: "102",
-    description: "National Emergency Ambulance"
-  },
-  {
-    type: "Fire Service",
-    emergencyType: EmergencyType.Fire,
-    number: "101",
-    description: "Fire Emergency Service"
-  },
-  {
-    type: "Police",
-    emergencyType: EmergencyType.Police,
-    number: "100",
-    description: "Police Control Room"
-  }
-];
-
-// Props interfaces
-interface EmergencyButtonProps {
-  icon: React.ReactNode;
-  title: string;
-  titleHindi: string;
-  description: string;
-  color: 'red' | 'orange' | 'blue';
-  onClick: () => void;
-}
-
-interface RequestCardProps {
-  request: EmergencyRequest;
-}
-
-// Helper functions
-const getStatusColor = (status: RequestStatus): string => {
-  const colors = {
-    [RequestStatus.Pending]: "bg-yellow-100 text-yellow-800",
-    [RequestStatus.Dispatched]: "bg-blue-100 text-blue-800",
-    [RequestStatus.Completed]: "bg-green-100 text-green-800"
-  };
-  return colors[status];
-};
-
-const getEmergencyContacts = (type: EmergencyType): EmergencyContact[] => {
-  return EMERGENCY_CONTACTS.filter(contact => contact.emergencyType === type);
-};
-
-// Component functions
-const EmergencyButton = ({
-  icon,
-  title,
-  titleHindi,
-  description,
-  color,
-  onClick
-}: EmergencyButtonProps) => {
-  const colorStyles = {
-    red: "bg-red-600 hover:bg-red-700",
-    orange: "bg-orange-600 hover:bg-orange-700",
-    blue: "bg-blue-600 hover:bg-blue-700"
-  };
-
-  return (
-    <Button
-      onClick={onClick}
-      className={`w-full h-32 ${colorStyles[color]} flex flex-col items-center justify-center space-y-2`}
-    >
-      {icon}
-      <div className="text-center">
-        <div className="font-bold">{title}</div>
-        <div className="text-sm font-medium">{titleHindi}</div>
-        <div className="text-sm opacity-90">{description}</div>
-      </div>
-    </Button>
-  );
-};
-
-const RequestCard = ({ request }: RequestCardProps) => {
-  return (
-    <Card className="hover:shadow-lg transition-shadow">
-      <CardContent className="pt-6">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="font-medium text-indigo-600">{request.type} Emergency</h3>
-            <p className="text-sm text-gray-500">ID: {request.id}</p>
-          </div>
-          <Badge className={getStatusColor(request.status)}>{request.status}</Badge>
-        </div>
-
-        <div className="space-y-3 text-sm text-gray-600">
-          <div className="flex items-center">
-            <MapPin className="h-4 w-4 mr-2 text-gray-400" />
-            <span>{request.address}</span>
-          </div>
-          <div className="flex items-center">
-            <Clock className="h-4 w-4 mr-2 text-gray-400" />
-            <span>{request.timestamp}</span>
-          </div>
-          <p className="text-sm">{request.description}</p>
-        </div>
-
-        {request.status === RequestStatus.Dispatched && request.responseTime && (
-          <div className="mt-4">
-            <div className="flex justify-between text-sm mb-2">
-              <span>Response Time</span>
-              <span>{request.responseTime} mins</span>
-            </div>
-            <Progress value={66} className="h-2" />
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  );
-};
-
-// Main component
-export default function UserDashboard() {
-  const [selectedEmergency, setSelectedEmergency] = useState<EmergencyType | null>(null);
-  const [isMapExpanded, setIsMapExpanded] = useState(false);
-  const [requests, setRequests] = useState<EmergencyRequest[]>([]);
-  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
-  const [stations, setStations] = useState<{ fireStations: Station[], policeStations: Station[], ambulanceStations: Station[] }>({ fireStations: [], policeStations: [], ambulanceStations: [] });
-  const [emergencyLocations, setEmergencyLocations] = useState<EmergencyLocation[]>([]);
-  const [showDropdown, setShowDropdown] = useState(false);
+  // Cleanup URLs when component unmounts or new media is uploaded
+  useEffect(() => {
+    return () => {
+      if (detectionResults?.originalImage) {
+        URL.revokeObjectURL(detectionResults.originalImage); // Cleanup object URL
+      }
+      // processedImage is a base64 string and doesn't require cleanup
+    };
+  }, [detectionResults]);
 
   useEffect(() => {
-    const fetchEmergencyData = async () => {
+    const initStations = async () => {
+      setIsInitializing(true);
       try {
-        const [locations, requests, vehicles, stations] = await Promise.all([
-          getEmergencyLocations(),
-          getRequests(),
-          getVehicles(),
-          getStations()
-        ]);
-
-        setEmergencyLocations(locations);
-        setRequests(requests);
-        setVehicles(vehicles);
-        setStations(stations);
+        const stationData = await getStations();
+        setStations(stationData);
+        setModelInitialized(true);
       } catch (error) {
-        console.error("Error fetching emergency data:", error);
+        console.error("Error initializing stations:", error);
+        setModelInitialized(false);
+      } finally {
+        setIsInitializing(false);
       }
     };
-
-    fetchEmergencyData();
+    initStations();
   }, []);
-
-  const handleEmergencyClick = (type: EmergencyType) => {
-    setSelectedEmergency(type);
-  };
-
-  // State for managing image upload and processing
-  const [modelStatus, setModelStatus] = useState<'uninitialized' | 'initializing' | 'ready' | 'error'>('uninitialized');
-  const [modelInitialized, setModelInitialized] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [uploadProgress, setUploadProgress] = useState(0);
-  const [detectionResults, setDetectionResults] = useState<DetectionResponse | null>(null);
-  const [modelError, setModelError] = useState<string | null>(null);
-
-  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-
-    setIsProcessing(true);
-    setUploadProgress(0);
-    setDetectionResults(null);
-
-    try {
-      const detectionResults = await detectEmergencyInImage(file);
-      setDetectionResults(detectionResults);
-
-      // Process emergency type based on detections
-      let emergencyType: EmergencyType | null = null;
-      const detection = detectionResults.detections[0]; // Get first detection
-
-      if (detection) {
-        switch (detection.class_name.toLowerCase()) {
-          case "ambulance":
-            emergencyType = EmergencyType.Medical;
-            break;
-          case "fire engine":
-            emergencyType = EmergencyType.Fire;
-            break;
-          case "police":
-            emergencyType = EmergencyType.Police;
-            break;
-        }
-
-        // If emergency vehicle detected, automatically trigger emergency dialog
-        if (emergencyType) {
-          setSelectedEmergency(emergencyType);
-
-          // Create emergency request
-          const newRequest: Partial<EmergencyRequest> = {
-            type: emergencyType,
-            status: RequestStatus.Pending,
-            location: [77.5946, 12.9716], // Default location - should be obtained from device
-            address: "Current Location", // Should be obtained from geocoding
-            description: `Emergency ${detection.class_name} detected with ${(detection.confidence * 100).toFixed(1)}% confidence`,
-            timestamp: new Date().toISOString()
-          };
-
-          try {
-            const requestResponse = await fetch("/api/requests", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(newRequest),
-            });
-
-            if (!requestResponse.ok) {
-              throw new Error("Failed to create emergency request");
-            }
-
-            // Update requests list
-            const newRequestData = await requestResponse.json();
-            setRequests(prev => [...prev, newRequestData]);
-
-          } catch (error) {
-            console.error("Error creating emergency request:", error);
-          }
-        }
-      }
-
-    } catch (error) {
-      console.error("Error processing image:", error);
-      alert(error instanceof Error ? error.message : "Failed to process image");
-    } finally {
-      setIsProcessing(false);
-      setUploadProgress(0);
-    }
-  };
 
   const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
 
+    // Cleanup previous original image URL
+    if (detectionResults?.originalImage) {
+      URL.revokeObjectURL(detectionResults.originalImage);
+    }
+    // No need to revoke processedImage as it's a base64 string
+
     setIsProcessing(true);
-    setUploadProgress(0);
     setDetectionResults(null);
 
     try {
-      const detectionResults = await detectEmergencyInVideo(file);
-      setDetectionResults(detectionResults);
-
-      // Process emergency type based on detections
-      let emergencyType: EmergencyType | null = null;
-      const detection = detectionResults.detections[0]; // Get first detection
-
-      if (detection) {
-        switch (detection.class_name.toLowerCase()) {
-          case "ambulance":
-            emergencyType = EmergencyType.Medical;
-            break;
-          case "fire engine":
-            emergencyType = EmergencyType.Fire;
-            break;
-          case "police":
-            emergencyType = EmergencyType.Police;
-            break;
-        }
-
-        // If emergency vehicle detected, automatically trigger emergency dialog
-        if (emergencyType) {
-          setSelectedEmergency(emergencyType);
-
-          // Create emergency request
-          const newRequest: Partial<EmergencyRequest> = {
-            type: emergencyType,
-            status: RequestStatus.Pending,
-            location: [77.5946, 12.9716], // Default location - should be obtained from device
-            address: "Current Location", // Should be obtained from geocoding
-            description: `Emergency ${detection.class_name} detected with ${(detection.confidence * 100).toFixed(1)}% confidence`,
-            timestamp: new Date().toISOString()
-          };
-
-          try {
-            const requestResponse = await fetch("/api/requests", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify(newRequest),
-            });
-
-            if (!requestResponse.ok) {
-              throw new Error("Failed to create emergency request");
-            }
-
-            // Update requests list
-            const newRequestData = await requestResponse.json();
-            setRequests(prev => [...prev, newRequestData]);
-
-          } catch (error) {
-            console.error("Error creating emergency request:", error);
-          }
-        }
+      const results = await detectEmergencyInVideo(file);
+      setDetectionResults({
+        ...results,
+        originalImage: URL.createObjectURL(file),
+        processedImage: results.processedImage || undefined,
+      });
+      if (results.emergencyDetected) {
+        setActiveEmergency(true);
       }
-
     } catch (error) {
       console.error("Error processing video:", error);
-      alert(error instanceof Error ? error.message : "Failed to process video");
+      alert(
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+          ? error
+          : "Failed to process video"
+      );
     } finally {
       setIsProcessing(false);
-      setUploadProgress(0);
     }
   };
 
-  const handleSetEmergencyContacts = async () => {
-    const contacts = [
-      { type: "Ambulance", number: "102", description: "National Emergency Ambulance", emergencyType: EmergencyType.Medical },
-      { type: "Fire Service", number: "101", description: "Fire Emergency Service", emergencyType: EmergencyType.Fire },
-      { type: "Police", number: "100", description: "Police Control Room", emergencyType: EmergencyType.Police }
-    ];
+  const handleImageUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    // Cleanup previous original image URL
+    if (detectionResults?.originalImage) {
+      URL.revokeObjectURL(detectionResults.originalImage);
+    }
+    // No need to revoke processedImage as it's a base64 string
+
+    setIsProcessing(true);
+    setDetectionResults(null);
 
     try {
-      const response = await fetch("/api/set_emergency_contacts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify(contacts)
+      const results = await detectEmergencyInImage(file);
+      setDetectionResults({
+        ...results,
+        originalImage: URL.createObjectURL(file),
+        processedImage: results.processedImage  // Now directly using the base64 image
       });
-
-      if (!response.ok) {
-        throw new Error("Failed to set emergency contacts");
+      if (results.emergencyDetected) {
+        setActiveEmergency(true);
       }
-
-      const data = await response.json();
-      console.log("Emergency contacts set:", data);
     } catch (error) {
-      console.error("Error setting emergency contacts:", error);
+      console.error("Error processing image:", error);
+      alert(
+        error instanceof Error
+          ? error.message
+          : typeof error === "string"
+          ? error
+          : "Failed to process image"
+      );
+    } finally {
+      setIsProcessing(false);
     }
   };
 
-  const handleGetMedicalInformation = async () => {
-    try {
-      const response = await fetch("/api/medical_information");
-
-      if (!response.ok) {
-        throw new Error("Failed to get medical information");
-      }
-
-      const data = await response.json();
-      console.log("Medical information:", data);
-    } catch (error) {
-      console.error("Error getting medical information:", error);
+  // Status badge component with loading state
+  const ModelStatusBadge = () => {
+    let color = "bg-blue-400";
+    if (isInitializing) {
+      color = "bg-yellow-400";
+    } else if (!modelInitialized) {
+      color = "bg-red-400";
     }
+    return (
+      <Badge variant="outline" className={color}>
+        {isInitializing ? "Initializing..." : modelInitialized ? "Ready" : "Error"}
+      </Badge>
+    );
   };
 
-  const handleGetSavedLocations = async () => {
-    try {
-      const response = await fetch("/api/saved_locations");
+  const EmergencyStatusBadge: React.FC = () => (
+    <Badge className={activeEmergency ? "bg-red-500" : "bg-green-500"}>
+      {activeEmergency ? (
+        <div className="flex items-center gap-1">
+          <AlertTriangle className="h-4 w-4" />
+          Active Emergency
+        </div>
+      ) : (
+        <div className="flex items-center gap-1">
+          <CheckCircle2 className="h-4 w-4" />
+          All Clear
+        </div>
+      )}
+    </Badge>
+  );
 
-      if (!response.ok) {
-        throw new Error("Failed to get saved locations");
-      }
-
-      const data = await response.json();
-      console.log("Saved locations:", data);
-    } catch (error) {
-      console.error("Error getting saved locations:", error);
-    }
+  const emergencyNumbers = {
+    medical: process.env.NEXT_PUBLIC_MEDICAL_EMERGENCY_NUMBER || "108",
+    fire: process.env.NEXT_PUBLIC_FIRE_EMERGENCY_NUMBER || "101",
+    police: process.env.NEXT_PUBLIC_POLICE_EMERGENCY_NUMBER || "100",
+    general: process.env.NEXT_PUBLIC_GENERAL_EMERGENCY_NUMBER || "112",
   };
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto py-6 px-4 sm:px-6 lg:px-8">
+      <div className="container mx-auto p-6 space-y-6">
         <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-indigo-600">EVS Dashboard</h1>
-          <div className="relative">
-            <div className="w-12 h-12 rounded-full bg-indigo-600 flex items-center justify-center text-white font-bold text-xl cursor-pointer" onClick={() => setShowDropdown(!showDropdown)}>
-              U
-            </div>
-            {showDropdown && (
-              <div className="absolute right-0 mt-2 w-48 bg-white border border-gray-200 rounded-lg shadow-lg">
-                <div className="py-1">
-                  <Button variant="outline" className="w-full text-indigo-600">
-                    <History className="mr-2 h-4 w-4" />
-                    History
-                  </Button>
-                  <Button variant="outline" className="w-full text-indigo-600">
-                    <Settings className="mr-2 h-4 w-4" />
-                    Settings
-                  </Button>
+          <h1 className="text-3xl font-bold">Emergency Response Dashboard</h1>
+          <EmergencyStatusBadge />
+        </div>
+
+        {activeEmergency && (
+          <Alert variant="destructive" className="mb-6">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertTitle>Emergency Detected</AlertTitle>
+            <AlertDescription>
+              Emergency services have been notified and are en route to your location.
+              Stay calm and follow emergency protocols.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        <div className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            <Card className="shadow-lg border-l-4 border-blue-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Ambulance className="h-5 w-5 text-blue-500" />
+                  Medical Services
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">Nearest Hospital: 2.3 miles</p>
+                  <p className="text-sm text-gray-600">Available Units: 3</p>
+                  <Button className="w-full mt-4">Request Ambulance</Button>
                 </div>
-              </div>
-            )}
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg border-l-4 border-red-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <Truck className="h-5 w-5 text-red-500" />
+                  Fire Services
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">Nearest Station: 1.8 miles</p>
+                  <p className="text-sm text-gray-600">Available Units: 2</p>
+                  <Button className="w-full mt-4">Request Fire Service</Button>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg border-l-4 border-yellow-500">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5 text-yellow-500" />
+                  Police Services
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600">Nearest Station: 1.5 miles</p>
+                  <p className="text-sm text-gray-600">Available Units: 4</p>
+                  <Button className="w-full mt-4">Request Police</Button>
+                </div>
+              </CardContent>
+            </Card>
           </div>
-        </div>
 
-        {/* Emergency Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-6">
-          <EmergencyButton
-            icon={<PhoneCall className="h-6 w-6" />}
-            title="Medical Emergency"
-            titleHindi="चिकित्सा आपातकाल"
-            description="Dial 102/108 for immediate assistance"
-            color="red"
-            onClick={() => handleEmergencyClick(EmergencyType.Medical)}
-          />
-          <EmergencyButton
-            icon={<Siren className="h-6 w-6" />}
-            title="Fire Emergency"
-            titleHindi="अग्नि आपातकाल"
-            description="Dial 101 for fire services"
-            color="orange"
-            onClick={() => handleEmergencyClick(EmergencyType.Fire)}
-          />
-          <EmergencyButton
-            icon={<ShieldAlert className="h-6 w-6" />}
-            title="Police Emergency"
-            titleHindi="पुलिस आपातकाल"
-            description="Dial 100 for police assistance"
-            color="blue"
-            onClick={() => handleEmergencyClick(EmergencyType.Police)}
-          />
-        </div>
+          <div className="flex space-x-6">
+            <Card className="shadow-lg flex-1">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <MapPin className="h-5 w-5" />
+                  Emergency Response Map
+                </CardTitle>
+                <CardDescription>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                    <span>Fire Engine</span>
+                    <div className="w-4 h-4 rounded-full bg-orange-500"></div>
+                    <span>Police Vehicle</span>
+                    <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                    <span>Ambulance</span>
+                  </div>
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="h-96">
+                  <Map
+                    paths={[]}
+                    markers={
+                      detectionResults?.detections.map((detection) => ({
+                        position: [detection.bbox[0], detection.bbox[1]],
+                        type: detection.class_name,
+                        confidence: detection.confidence,
+                      })) || []
+                    }
+                    center={[81.7800, 16.9927]} // Rajahmundry coordinates (lng, lat)
+                    zoom={12}
+                    fireEngineIcon="/icons/fire-engine.png" // Ensure this path exists
+                    policeVehicleIcon="/icons/police-vehicle.png" // Ensure this path exists
+                  />
+                </div>
+              </CardContent>
+            </Card>
 
-        {/* Emergency Contact Dialog */}
-        <Dialog open={!!selectedEmergency} onOpenChange={() => setSelectedEmergency(null)}>
-          <DialogContent className="sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle className="text-center text-xl font-bold text-indigo-600">
-                {selectedEmergency} Emergency Contacts
-              </DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 mt-4">
-              {selectedEmergency && getEmergencyContacts(selectedEmergency).map((contact, index) => (
-                <Card key={index} className="hover:shadow-md transition-shadow">
-                  <CardContent className="pt-6">
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-medium text-indigo-600">{contact.type}</h3>
-                      <Badge variant="outline" className="text-indigo-600">
-                        {contact.number}
-                      </Badge>
-                    </div>
-                    <p className="text-sm text-gray-600">{contact.description}</p>
-                    <Button
-                      className="w-full mt-4 bg-indigo-600 hover:bg-indigo-700"
-                      onClick={() => window.location.href = `tel:${contact.number}`}
-                    >
-                      <Phone className="mr-2 h-4 w-4" />
-                      Call Now
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-              <div className="text-sm text-gray-500 text-center mt-4">
-                These are toll-free emergency numbers available 24x7 across India
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* Map & Active Requests Section */}
-        <div className={`grid grid-cols-1 ${isMapExpanded ? '' : 'lg:grid-cols-3'} gap-6`}>
-          <Card className={`${isMapExpanded ? '' : 'lg:col-span-2'} shadow-lg`}>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-indigo-600">Response Map</CardTitle>
-              <div className="flex space-x-2">
-                <Button variant="outline" size="sm">
-                  <div className="w-3 h-3 rounded-full bg-red-600 mr-2" />
-                  Ambulances
-                </Button>
-                <Button variant="outline" size="sm">
-                  <div className="w-3 h-3 rounded-full bg-orange-600 mr-2" />
-                  Fire Stations
-                </Button>
-                <Button variant="outline" size="sm">
-                  <div className="w-3 h-3 rounded-full bg-blue-600 mr-2" />
-                  Police Stations
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setIsMapExpanded(!isMapExpanded)}
-                >
-                  <Maximize2 className="h-4 w-4" />
-                </Button>
-              </div>
-            </CardHeader>
-            <CardContent className="p-0">
-              <div className={isMapExpanded ? "h-[800px]" : "h-[400px]"}>
-                <Map
-                  vehicles={vehicles}
-                  emergencyLocations={emergencyLocations}
-                  fireStations={stations.fireStations}
-                  policeStations={stations.policeStations}
-                  ambulanceStations={stations.ambulanceStations}
-                />
-              </div>
-            </CardContent>
-          </Card>
-
-          {!isMapExpanded && (
-            <div className="space-y-6">
+            <div className="flex-1 space-y-6">
               <Card className="shadow-lg">
                 <CardHeader>
-                  <CardTitle className="text-indigo-600">Active Requests</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    System Status
+                  </CardTitle>
+                  <CardDescription className="text-blue-100">
+                    Real-time monitoring active
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span>Model Status</span>
+                      <ModelStatusBadge />
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span>Response Time</span>
+                      <Badge variant="outline" className="bg-blue-400">{"< 5 min"}</Badge>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <History className="h-5 w-5" />
+                    Recent Activity
+                  </CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-4">
-                    {requests.map((request) => (
-                      <RequestCard key={request.id} request={request} />
+                    {[
+                      { id: 1, time: "10:45 AM", event: "System Check Complete" },
+                      { id: 2, time: "10:30 AM", event: "Location Updated" },
+                      { id: 3, time: "10:15 AM", event: "Connection Verified" },
+                    ].map((activity) => (
+                      <div key={activity.id} className="flex items-center justify-between">
+                        <span className="text-sm text-gray-300">{activity.time}</span>
+                        <span>{activity.event}</span>
+                        <ChevronRight className="h-4 w-4 text-gray-400" />
+                      </div>
                     ))}
                   </div>
                 </CardContent>
@@ -600,135 +335,214 @@ export default function UserDashboard() {
 
               <Card className="shadow-lg">
                 <CardHeader>
-                  <CardTitle className="text-indigo-600">Quick Actions</CardTitle>
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="h-5 w-5" />
+                    Quick Actions
+                  </CardTitle>
                 </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <Button className="w-full" variant="outline" onClick={handleSetEmergencyContacts}>
-                      <BellRing className="mr-2 h-4 w-4" />
-                      Set Emergency Contacts
-                    </Button>
-                    <Button className="w-full" variant="outline" onClick={handleGetMedicalInformation}>
-                      <FileText className="mr-2 h-4 w-4" />
-                      Medical Information
-                    </Button>
-                    <Button className="w-full" variant="outline" onClick={handleGetSavedLocations}>
-                      <MapPin className="mr-2 h-4 w-4" />
-                      Saved Locations
-                    </Button>
-                    <Card className="shadow-lg">
-                      <CardHeader>
-                        <CardTitle className="text-indigo-600">Media Upload</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-4">
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                              <input
-                                type="file"
-                                accept="image/*"
-                                onChange={handleImageUpload}
-                                className="hidden"
-                                id="image-upload"
-                                disabled={isProcessing || !modelInitialized}
-                              />
-                              <label htmlFor="image-upload" className="block">
-                                <Button
-                                  className="w-full h-32 border-2 border-dashed border-gray-300 hover:border-indigo-500 bg-white hover:bg-gray-50"
-                                  variant="outline"
-                                  disabled={isProcessing || !modelInitialized}
-                                >
-                                  <div className="flex flex-col items-center space-y-2">
-                                    <Camera className="h-8 w-8 text-indigo-600" />
-                                    <span className="text-sm font-medium text-gray-600">
-                                      {isProcessing
-                                        ? `Processing Image (${uploadProgress}%)`
-                                        : "Upload Image"}
-                                    </span>
-                                  </div>
-                                </Button>
-                              </label>
-                            </div>
-
-                            <div>
-                              <input
-                                type="file"
-                                accept="video/*"
-                                onChange={handleVideoUpload}
-                                className="hidden"
-                                id="video-upload"
-                                disabled={isProcessing || !modelInitialized}
-                              />
-                              <label htmlFor="video-upload" className="block">
-                                <Button
-                                  className="w-full h-32 border-2 border-dashed border-gray-300 hover:border-indigo-500 bg-white hover:bg-gray-50"
-                                  variant="outline"
-                                  disabled={isProcessing || !modelInitialized}
-                                >
-                                  <div className="flex flex-col items-center space-y-2">
-                                    <Video className="h-8 w-8 text-indigo-600" />
-                                    <span className="text-sm font-medium text-gray-600">
-                                      {isProcessing
-                                        ? `Processing Video (${uploadProgress}%)`
-                                        : "Upload Video"}
-                                    </span>
-                                  </div>
-                                </Button>
-                              </label>
-                            </div>
+                <CardContent className="space-y-4">
+                  <Dialog>
+                    <DialogTrigger asChild>
+                      <Button className="w-full bg-red-500 hover:bg-red-600" aria-label="Make an emergency call">
+                        <PhoneCall className="mr-2 h-4 w-4" />
+                        Emergency Call
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent>
+                      <DialogHeader>
+                        <DialogTitle>Emergency Call</DialogTitle>
+                      </DialogHeader>
+                      <div className="space-y-4">
+                        <Button className="w-full" onClick={() => window.location.href = `tel:${emergencyNumbers.medical}`}>
+                          <Ambulance className="mr-2 h-4 w-4" />
+                          Medical Emergency
+                        </Button>
+                        <Button className="w-full" onClick={() => window.location.href = `tel:${emergencyNumbers.fire}`}>
+                          <Truck className="mr-2 h-4 w-4" />
+                          Fire Emergency
+                        </Button>
+                        <Button className="w-full" onClick={() => window.location.href = `tel:${emergencyNumbers.police}`}>
+                          <ShieldAlert className="mr-2 h-4 w-4" />
+                          Police Emergency
+                        </Button>
+                        <div className="p-4 bg-white shadow-md rounded-md">
+                          <h2 className="text-xl font-bold mb-4">Emergency Numbers</h2>
+                          <div className="space-y-2">
+                            <div><span className="font-semibold">Medical Emergency:</span> {emergencyNumbers.medical}</div>
+                            <div><span className="font-semibold">Fire Station:</span> {emergencyNumbers.fire}</div>
+                            <div><span className="font-semibold">Police Emergency:</span> {emergencyNumbers.police}</div>
+                            <div><span className="font-semibold">General Emergency:</span> {emergencyNumbers.general}</div>
                           </div>
-
-                          {modelStatus === 'error' && (
-                            <div className="mt-2 p-2 text-sm text-red-600 bg-red-50 rounded-md">
-                              {modelError || 'Failed to initialize detection model. Please try refreshing the page.'}
-                            </div>
-                          )}
-
-                          {modelStatus === 'initializing' && (
-                            <div className="mt-2 p-2 text-sm text-blue-600 bg-blue-50 rounded-md">
-                              Initializing emergency detection model...
-                            </div>
-                          )}
-
-                          {detectionResults && detectionResults.detections.length > 0 && (
-                            <Card>
-                              <CardHeader>
-                                <CardTitle className="text-sm">Detection Results</CardTitle>
-                              </CardHeader>
-                              <CardContent>
-                                <div className="space-y-2">
-                                  {detectionResults.detections.map((det, idx) => (
-                                    <div key={idx} className="flex justify-between items-center">
-                                      <span className="text-sm font-medium">{det.class_name}</span>
-                                      <Badge variant="secondary">
-                                        {(det.confidence * 100).toFixed(1)}% confidence
-                                      </Badge>
-                                    </div>
-                                  ))}
-                                </div>
-                              </CardContent>
-                            </Card>
-                          )}
-
-                          {isProcessing && (
-                            <div className="space-y-2">
-                              <div className="flex justify-between text-sm">
-                                <span>Upload Progress</span>
-                                <span>{uploadProgress}%</span>
-                              </div>
-                              <Progress value={uploadProgress} className="h-2" />
-                            </div>
-                          )}
                         </div>
-                      </CardContent>
-                    </Card>
-                  </div>
+                      </div>
+                    </DialogContent>
+                  </Dialog>
                 </CardContent>
               </Card>
             </div>
-          )}
+          </div>
+
+          <div className="mt-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Upload className="h-5 w-5" />
+                    Before Analysis
+                  </CardTitle>
+                  <CardDescription>Original uploaded media</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                    {detectionResults?.originalImage ? (
+                      <img
+                        src={detectionResults.originalImage}
+                        alt="Original media"
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full">
+                        <p className="text-gray-500">No media uploaded</p>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-lg">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Activity className="h-5 w-5" />
+                    After Analysis
+                  </CardTitle>
+                  <CardDescription>YOLO detection results</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="aspect-video bg-gray-100 rounded-lg overflow-hidden">
+                    {detectionResults?.processedImage ? (
+                      <img
+                        src={detectionResults.processedImage}
+                        alt="Processed media with detections"
+                        className="w-full h-full object-contain"
+                        onError={(e) => {
+                          console.error('Error loading processed image:', e);
+                          e.currentTarget.src = '/path/to/fallback-image.png'; // Provide a fallback image
+                        }}
+                      />
+                    ) : (
+                      <div className="flex items-center justify-center h-full">
+                        <p className="text-gray-500">No analysis results</p>
+                      </div>
+                    )}
+                  </div>
+                  {detectionResults && (
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h3 className="font-semibold mb-2">Detection Summary</h3>
+                      <div className="space-y-2">
+                        <div className="flex justify-between">
+                          <span>Status:</span>
+                          <Badge className={detectionResults.emergencyDetected ? "bg-red-400" : "bg-green-400"}>
+                            {detectionResults.emergencyDetected ? "Emergency" : "Clear"}
+                          </Badge>
+                        </div>
+                        {detectionResults.emergencyType && (
+                          <div className="flex justify-between">
+                            <span>Type:</span>
+                            <Badge>{detectionResults.emergencyType}</Badge>
+                          </div>
+                        )}
+                        {detectionResults.confidence && (
+                          <div className="flex justify-between">
+                            <span>Confidence:</span>
+                            <Badge>{`${(detectionResults.confidence * 100).toFixed(1)}%`}</Badge>
+                          </div>
+                        )}
+                        {detectionResults.detections.length > 0 && (
+                          <div className="flex justify-between">
+                            <span>Detected Vehicles:</span>
+                            <Badge>
+                              {detectionResults.detections.map(det => det.class_name).join(', ')}
+                            </Badge>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Card className="shadow-lg bg-gradient-to-br from-blue-500 to-blue-700 text-white">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Video className="h-5 w-5" />
+                    Video Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <label className="block w-full p-4 border-2 border-white/20 rounded-lg text-center cursor-pointer hover:bg-white/10 transition-colors">
+                    <Video className="mx-auto h-8 w-8 mb-2" />
+                    <input
+                      type="file"
+                      accept="video/*"
+                      onChange={handleVideoUpload}
+                      className="hidden"
+                      disabled={isProcessing || isInitializing}
+                    />
+                    <span className="block text-sm font-medium">
+                      {isProcessing ? "Processing..." : "Upload Video"}
+                    </span>
+                    <Badge className="mt-2 bg-white/20">
+                      {isInitializing ? "Initializing..." : modelInitialized ? "Ready" : "Error"}
+                    </Badge>
+                  </label>
+                </CardContent>
+              </Card>
+
+              <Card className="shadow-lg bg-gradient-to-br from-purple-500 to-purple-700 text-white">
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Camera className="h-5 w-5" />
+                    Image Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <label className="block w-full p-4 border-2 border-white/20 rounded-lg text-center cursor-pointer hover:bg-white/10 transition-colors">
+                    <Camera className="mx-auto h-8 w-8 mb-2" />
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageUpload}
+                      className="hidden"
+                      disabled={isProcessing || isInitializing}
+                    />
+                    <span className="block text-sm font-medium">
+                      {isProcessing ? "Processing..." : "Upload Image"}
+                    </span>
+                    <Badge className="mt-2 bg-white/20">
+                      {isInitializing ? "Initializing..." : modelInitialized ? "Ready" : "Error"}
+                    </Badge>
+                  </label>
+                </CardContent>
+              </Card>
+            </div>
+
+            {detectionResults?.emergencyDetected && (
+              <Alert variant="destructive" className="mt-6">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertTitle>Emergency Services Notified</AlertTitle>
+                <AlertDescription>
+                  Based on the detection results, emergency services have been automatically notified.
+                  Stay in your current location unless instructed otherwise.
+                </AlertDescription>
+              </Alert>
+            )}
+          </div>
         </div>
       </div>
     </Layout>
   );
-}
+};
+
+export default UserDashboard;

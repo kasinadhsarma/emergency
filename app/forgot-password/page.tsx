@@ -173,17 +173,17 @@ export default function ForgotPassword() {
                   <AlertDescription className="text-indigo-600">{error}</AlertDescription>
                 </Alert>
               )}
-              <Button 
-                type="submit" 
+              <Button
+                type="submit"
                 className="w-full bg-indigo-600 text-white hover:bg-indigo-700"
                 disabled={loading}
               >
-                {loading 
-                  ? "Processing..." 
-                  : step === 1 
-                    ? "Send Reset Code" 
-                    : step === 2 
-                      ? "Verify Code" 
+                {loading
+                  ? "Processing..."
+                  : step === 1
+                    ? "Send Reset Code"
+                    : step === 2
+                      ? "Verify Code"
                       : "Reset Password"}
               </Button>
             </form>

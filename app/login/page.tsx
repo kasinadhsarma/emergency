@@ -90,8 +90,8 @@ export default function Login() {
                 <p className="text-sm text-red-600">{error}</p>
               )}
               <div>
-                <Button 
-                  type="submit" 
+                <Button
+                  type="submit"
                   className="w-full bg-indigo-600 text-white hover:bg-indigo-700"
                   disabled={loading}
                 >

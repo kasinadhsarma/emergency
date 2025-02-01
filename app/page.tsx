@@ -1,9 +1,9 @@
-import Layout from "../components/Layout"
+import Layout from "@/components/Layout"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import Link from "next/link"
-import { ArrowRight, Clock, MapPin, Shield, Building2, Code, Zap, 
+import { ArrowRight, Clock, MapPin, Shield, Building2, Code, Zap,
          Globe, ChartBar, Users, Lock, Radio, Bell, Database } from "lucide-react"
 
 export default function Home() {

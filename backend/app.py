@@ -1,354 +1,319 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.responses import StreamingResponse, JSONResponse
+from fastapi import FastAPI, File, UploadFile, HTTPException, BackgroundTasks
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
-from pathlib import Path
+from typing import Optional
+import os
 import cv2
 import numpy as np
-from typing import List, Optional, Dict
-import json
-from pydantic import BaseModel
-import io
 from datetime import datetime
-from contextlib import asynccontextmanager
+import shutil
+import logging
+from utils.detection import EmergencyVehicleDetector  # Remove old imports
+import base64
+from io import BytesIO
+from PIL import Image
 
-# Mock imports for utils (replace with actual implementations)
-from utils.detection import VehicleDetector
-from utils.pathfinding import PathFinder, Location
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-# Initialize components
-detector = VehicleDetector(model_path='yolov8n.pt')
-pathfinder = PathFinder()
+class Config:
+    """Application configuration"""
+    API_VERSION = "1.0.0"
+    API_TITLE = "Emergency Response API"
+    API_DESCRIPTION = "API for emergency vehicle detection and response management"
+    
+    UPLOAD_FOLDER = 'uploads'
+    ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png'}
+    ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'avi', 'mov'}
+    MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
-# Load emergency locations for Rajahmundry
-EMERGENCY_LOCATIONS = {
-    'hospital': [
-        Location("Kalyan Nursing Home", 16.9780, 81.7830, "hospital"),
-        Location("Kranthi Nursing Home", 16.9785, 81.7790, "hospital"),
-        Location("Gowthami Nursing Home", 16.9805, 81.7750, "hospital")
-    ],
-    'fire_station': [
-        Location("Aryapuram Fire Station", 16.9786, 81.7778, "fire_station"),
-        Location("AP State Disaster Response & Fire Services Department", 16.9800, 81.7833, "fire_station")
-    ],
-    'police_station': [
-        Location("One Town Police Station", 16.9780, 81.7830, "police_station"),
-        Location("Two Town Police Station", 16.9785, 81.7790, "police_station"),
-        Location("Three Town Police Station", 16.9805, 81.7750, "police_station")
-    ]
-}
-
-AREA_BOUNDARY = {
-    'north': 17.0100,
-    'south': 16.9600,
-    'east': 81.8000,
-    'west': 81.7500
-}
-
-# Storage for emergency requests
-EMERGENCY_REQUESTS = []
-
-MOCK_VEHICLES = [
-    {
-        "id": "vehicle-1",
-        "type": "ambulance",
-        "location": [16.9780, 81.7830],  # [lat, lon]
-        "status": "available",
-        "eta": None
-    },
-    {
-        "id": "vehicle-2",
-        "type": "fire_engine",
-        "location": [16.9786, 81.7778],  # [lat, lon]
-        "status": "available",
-        "eta": None
-    },
-    {
-        "id": "vehicle-3",
-        "type": "police",
-        "location": [16.9785, 81.7790],  # [lat, lon]
-        "status": "available",
-        "eta": None
-    }
-]
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """Lifespan events for startup and shutdown"""
-    try:
-        for locations in EMERGENCY_LOCATIONS.values():
-            for location in locations:
-                pathfinder.add_emergency_location(location)
-        pathfinder.load_area_boundary(AREA_BOUNDARY)
-        print("Area graph loaded successfully")
-    except Exception as e:
-        print(f"Warning: Failed to load area graph: {e}")
-    yield
-    print("Shutting down application...")
-
-# Initialize FastAPI with lifespan
-app = FastAPI(title="Emergency Vehicle Detection & Routing", lifespan=lifespan)
+# Initialize FastAPI app
+app = FastAPI(
+    title=Config.API_TITLE,
+    description=Config.API_DESCRIPTION,
+    version=Config.API_VERSION
+)
 
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific origins
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Pydantic models
-class RouteRequest(BaseModel):
-    vehicle_type: str
-    current_lat: float
-    current_lon: float
-    traffic_weights: Optional[dict] = None
+# Create upload directory
+os.makedirs(Config.UPLOAD_FOLDER, exist_ok=True)
 
-class EmergencyContact(BaseModel):
-    type: str
-    number: str
-    description: str
-    emergencyType: str
-
-class EmergencyRequest(BaseModel):
-    type: str
-    location: List[float]
-    address: str
-    description: str
-
-class Vehicle(BaseModel):
-    id: str
-    type: str
-    location: List[float]
-    status: str
-    eta: Optional[str] = None
-
-class Detection(BaseModel):
-    class_name: str
-    confidence: float
-    bbox: List[float]
-    frame_number: Optional[int] = None
-    timestamp: Optional[float] = None
-
-# Model initialization endpoint
-@app.post("/api/init-model")
-async def init_model(
-    modelConfig: dict = {
-        "confidenceThreshold": 0.4,
-        "nmsThreshold": 0.45,
-        "modelVersion": "v2.1",
-        "enableGPU": True
-    }
-):
-    """Initialize the ML model with given configuration"""
+def validate_file(file: UploadFile, allowed_extensions: set) -> tuple[bool, str]:
+    """Validate uploaded file format and size"""
+    if not file.filename:
+        return False, "No filename provided"
+    
+    file_ext = file.filename.lower().split('.')[-1] if '.' in file.filename else ''
+    if file_ext not in allowed_extensions:
+        return False, f"File type not allowed. Allowed types: {', '.join(allowed_extensions)}"
+    
     try:
-        # Update model configuration
-        detector.model.conf = modelConfig.get("confidenceThreshold", 0.4)
-        detector.model.iou = modelConfig.get("nmsThreshold", 0.45)
-        return {"status": "ok", "message": "Model initialized successfully"}
+        file.file.seek(0, 2)
+        size = file.file.tell()
+        file.file.seek(0)
+        
+        if size > Config.MAX_FILE_SIZE:
+            return False, f"File size exceeds maximum limit of {Config.MAX_FILE_SIZE/1024/1024}MB"
+            
+        if size == 0:
+            return False, "File is empty"
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error validating file: {str(e)}")
+        return False, f"Error validating file: {str(e)}"
+    
+    return True, ""
 
-# Detection endpoints
-@app.post("/detect/image")
-async def detect_image(file: UploadFile = File(...)):
-    """Detect emergency vehicles in an image"""
+async def save_upload_file(file: UploadFile) -> str:
+    """Save uploaded file and return filepath"""
     try:
-        contents = await file.read()
-        nparr = np.frombuffer(contents, np.uint8)
-        img = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-
-        if img is None:
-            raise HTTPException(status_code=400, detail="Invalid image")
-
-        detections = detector.detect_frame(img)
-        results = [
-            Detection(
-                class_name=det.class_name,
-                confidence=det.confidence,
-                bbox=det.bbox.tolist()
-            )
-            for det in detections
-        ]
-
-        return {"detections": results}
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"{timestamp}_{file.filename}"
+        filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
+        
+        with open(filepath, "wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        logger.info(f"File saved successfully: {filepath}")
+        return filepath
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Error saving file: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Could not save file: {str(e)}")
 
-@app.post("/detect/video")
-async def detect_video(file: UploadFile = File(...)):
-    """Process video and return detections"""
+def cleanup_file(filepath: str):
+    """Background task to cleanup uploaded files"""
     try:
-        temp_path = Path("temp_video.mp4")
-        with temp_path.open("wb") as f:
-            f.write(await file.read())
-
-        all_detections = []
-        for frame_detections in detector.process_video(str(temp_path)):
-            frame_results = [
-                Detection(
-                    class_name=det.class_name,
-                    confidence=det.confidence,
-                    bbox=det.bbox.tolist(),
-                    frame_number=det.frame_number,
-                    timestamp=det.timestamp
-                )
-                for det in frame_detections
-            ]
-            all_detections.extend(frame_results)
-
-        return {"detections": all_detections}
+        if os.path.exists(filepath):
+            os.remove(filepath)
+            logger.info(f"Cleaned up file: {filepath}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    finally:
-        if temp_path.exists():
-            temp_path.unlink()
+        logger.error(f"Error cleaning up file {filepath}: {str(e)}")
 
-# Routing endpoint
-@app.post("/route")
-async def find_route(request: RouteRequest):
-    """Find optimal route for emergency vehicle"""
-    try:
-        route_coords, destination = pathfinder.find_optimal_route(
-            request.current_lat,
-            request.current_lon,
-            request.vehicle_type,
-            request.traffic_weights
-        )
-
-        map_vis = pathfinder.visualize_route(route_coords, destination)
-        map_data = io.BytesIO()
-        map_vis.save(map_data, close_file=False)
-        map_data.seek(0)
-
-        return StreamingResponse(
-            map_data,
-            media_type="text/html",
-            headers={"Content-Disposition": "inline; filename=route_map.html"}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-# Health check endpoint
 @app.get("/api/health")
 async def health_check():
     """Health check endpoint"""
-    return {"status": "ok", "timestamp": datetime.now().isoformat()}
+    return {
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": Config.API_VERSION
+    }
 
-# API endpoints
-@app.get("/api/locations")
-async def get_locations():
-    """Get all emergency locations"""
-    return EMERGENCY_LOCATIONS
+# Initialize detector at module level
+detector = EmergencyVehicleDetector()
+
+async def process_and_encode_image(filepath: str, detections: list) -> str:
+    """Process image with detections and return base64 encoded result"""
+    try:
+        # Read image
+        img = cv2.imread(filepath)
+        
+        # Draw detections
+        for det in detections:
+            bbox = det['bbox']
+            conf = det['confidence']
+            class_name = det['class_name']
+            
+            # Draw box
+            cv2.rectangle(img, 
+                         (bbox[0], bbox[1]), 
+                         (bbox[2], bbox[3]), 
+                         (0, 255, 0), 2)
+            
+            # Draw label
+            label = f"{class_name} {conf:.2f}"
+            cv2.putText(img, label, 
+                       (bbox[0], bbox[1] - 10), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 
+                       0.5, (0, 255, 0), 2)
+
+        # Convert to RGB for PIL
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        pil_img = Image.fromarray(img_rgb)
+        
+        # Save to bytes
+        img_byte_arr = BytesIO()
+        pil_img.save(img_byte_arr, format='PNG')
+        img_byte_arr = img_byte_arr.getvalue()
+        
+        # Encode to base64
+        base64_encoded = base64.b64encode(img_byte_arr).decode('utf-8')
+        return f"data:image/png;base64,{base64_encoded}"
+        
+    except Exception as e:
+        logger.error(f"Error processing image: {str(e)}")
+        return None
+
+@app.post("/api/detect/video")
+async def detect_video(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...)
+):
+    """
+    Detect emergency vehicles in video
+    """
+    logger.info(f"Received video detection request for file: {file.filename}")
+    
+    # Validate video file
+    is_valid, error_message = validate_file(file, Config.ALLOWED_VIDEO_EXTENSIONS)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
+
+    try:
+        # Save and process file
+        filepath = await save_upload_file(file)
+        
+        # Use detector instance instead of undefined function
+        detections = detector.detect_in_video(filepath)
+        
+        # Get the last frame or a representative frame
+        cap = cv2.VideoCapture(filepath)
+        ret, frame = cap.read()
+        cap.release()
+        
+        if ret:
+            # Save frame temporarily
+            frame_path = filepath + "_last_frame.jpg"
+            cv2.imwrite(frame_path, frame)
+            
+            # Process frame with detections
+            processed_image = await process_and_encode_image(frame_path, detections)
+            
+            # Cleanup frame
+            background_tasks.add_task(cleanup_file, frame_path)
+        else:
+            processed_image = None
+        
+        # Process results
+        emergency_detected = len(detections) > 0
+        max_confidence = max((d['confidence'] for d in detections), default=0.0)
+        
+        # Schedule cleanup
+        background_tasks.add_task(cleanup_file, filepath)
+        
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "emergencyDetected": emergency_detected,
+                "detections": detections,
+                "confidence": max_confidence,
+                "emergencyType": "MEDICAL" if emergency_detected else None,
+                "timestamp": datetime.now().isoformat(),
+                "processedImage": processed_image  # Add processed image to response
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error processing video: {str(e)}")
+        if 'filepath' in locals():
+            background_tasks.add_task(cleanup_file, filepath)
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/api/detect/image", status_code=200)  # Explicitly set status code
+async def detect_image(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...)
+):
+    """
+    Detect emergency vehicles in image
+    """
+    logger.info(f"Received image detection request for file: {file.filename}")
+
+    # Validate image file
+    is_valid, error_message = validate_file(file, Config.ALLOWED_IMAGE_EXTENSIONS)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
+
+    try:
+        # Save file
+        filepath = await save_upload_file(file)
+
+        # Use detector to process image
+        detections = detector.detect_in_image(filepath)
+
+        # Process image and get base64
+        processed_image = await process_and_encode_image(filepath, detections)
+
+        # Process results
+        emergency_detected = len(detections) > 0
+        max_confidence = max((d['confidence'] for d in detections), default=0.0)
+
+        # Schedule cleanup
+        background_tasks.add_task(cleanup_file, filepath)
+
+        return JSONResponse(
+            status_code=200,
+            content={
+                "status": "success",
+                "emergencyDetected": emergency_detected,
+                "detections": detections,
+                "confidence": max_confidence,
+                "emergencyType": "MEDICAL" if emergency_detected else None,
+                "timestamp": datetime.now().isoformat(),
+                "processedImage": processed_image  # Add processed image to response
+            }
+        )
+
+    except Exception as e:
+        logger.error(f"Error processing image: {str(e)}")
+        if 'filepath' in locals():
+            background_tasks.add_task(cleanup_file, filepath)
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/stations")
 async def get_stations():
-    """Get all emergency service stations"""
-    try:
-        stations = {
+    """
+    Get list of stations
+    """
+    # Return station data matching the StationData type expected by frontend
+    return JSONResponse(
+        status_code=200,
+        content={
+            "ambulanceStations": [
+                {"id": 1, "name": "City Hospital", "latitude": 16.9927, "longitude": 81.7800, "type": "MEDICAL"},
+                {"id": 2, "name": "General Hospital", "latitude": 16.9827, "longitude": 81.7700, "type": "MEDICAL"}
+            ],
             "fireStations": [
-                {
-                    "id": f"fire-{i}",
-                    "name": loc.name,
-                    "location": {"latitude": loc.lat, "longitude": loc.lon},
-                    "address": f"{loc.name}, Rajahmundry",
-                    "contact": "+91 1234567890"
-                }
-                for i, loc in enumerate(EMERGENCY_LOCATIONS['fire_station'])
+                {"id": 3, "name": "Central Fire Station", "latitude": 16.9927, "longitude": 81.7900, "type": "FIRE"},
+                {"id": 4, "name": "North Fire Station", "latitude": 17.0027, "longitude": 81.7800, "type": "FIRE"}
             ],
             "policeStations": [
-                {
-                    "id": f"police-{i}",
-                    "name": loc.name,
-                    "location": {"latitude": loc.lat, "longitude": loc.lon},
-                    "address": f"{loc.name}, Rajahmundry",
-                    "contact": "+91 1234567890"
-                }
-                for i, loc in enumerate(EMERGENCY_LOCATIONS['police_station'])
-            ],
-            "ambulanceStations": [
-                {
-                    "id": f"hospital-{i}",
-                    "name": loc.name,
-                    "location": {"latitude": loc.lat, "longitude": loc.lon},
-                    "address": f"{loc.name}, Rajahmundry",
-                    "contact": "+91 1234567890"
-                }
-                for i, loc in enumerate(EMERGENCY_LOCATIONS['hospital'])
+                {"id": 5, "name": "City Police HQ", "latitude": 16.9927, "longitude": 81.7700, "type": "POLICE"},
+                {"id": 6, "name": "Traffic Police Station", "latitude": 16.9827, "longitude": 81.7800, "type": "POLICE"}
             ]
         }
-        return JSONResponse(content=stations, status_code=200)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/requests")
-async def get_requests():
-    """Get all emergency requests"""
-    return JSONResponse(content=EMERGENCY_REQUESTS, status_code=200)
-
-@app.post("/api/requests")
-async def create_request(request: EmergencyRequest):
-    """Create a new emergency request"""
-    try:
-        new_request = {
-            "id": f"REQ-{len(EMERGENCY_REQUESTS) + 1}",
-            "type": request.type,
-            "status": "Pending",
-            "location": request.location,
-            "address": request.address,
-            "description": request.description,
-            "timestamp": datetime.now().isoformat()
+    )
+@app.exception_handler(404)
+async def not_found_handler(request, exc):
+    """Handle 404 errors"""
+    return JSONResponse(
+        status_code=404,
+        content={
+            "status": "error",
+            "message": "Resource not found",
+            "path": request.url.path
         }
-        EMERGENCY_REQUESTS.append(new_request)
-        return new_request
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    )
 
-@app.get("/api/vehicles")
-async def get_vehicles():
-    """Get all emergency vehicles"""
-    return MOCK_VEHICLES
-
-@app.post("/api/set_emergency_contacts")
-async def set_emergency_contacts(contacts: List[EmergencyContact]):
-    """Set emergency contacts for a user"""
-    try:
-        return {"message": "Emergency contacts updated successfully"}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/api/medical_information")
-async def get_medical_information():
-    """Get user's medical information"""
-    return {
-        "blood_type": "O+",
-        "allergies": ["Penicillin"],
-        "conditions": ["None"],
-        "emergency_contact": {
-            "name": "John Doe",
-            "relationship": "Father",
-            "phone": "+91 9876543210"
+@app.exception_handler(500)
+async def server_error_handler(request, exc):
+    """Handle 500 errors"""
+    logger.error(f"Internal server error: {str(exc)}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": "Internal server error",
+            "detail": str(exc)
         }
-    }
-
-@app.get("/api/saved_locations")
-async def get_saved_locations():
-    """Get user's saved locations"""
-    return [
-        {
-            "id": "home",
-            "name": "Home",
-            "address": "123 Main St, Rajahmundry",
-            "location": [16.9780, 81.7830]  # [lat, lon]
-        },
-        {
-            "id": "work",
-            "name": "Work",
-            "address": "456 Tech Park, Rajahmundry",
-            "location": [16.9790, 81.7795]  # [lat, lon]
-        }
-    ]
+    )
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    import uvicorn
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")

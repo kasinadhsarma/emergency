@@ -1,230 +1,171 @@
-"use client"
+"use client";
 
-import { useEffect, useRef, useState } from "react"
-import mapboxgl from "mapbox-gl"
-import "mapbox-gl/dist/mapbox-gl.css"
-import { getEmergencyLocations, getStations, getVehicles } from "../lib/api"
+import React, { useEffect, useRef, useState } from "react";
+import mapboxgl from "mapbox-gl";
+import "mapbox-gl/dist/mapbox-gl.css";
 
-interface Vehicle {
-  id: string
-  type: string
-  location: [number, number]
-  status: string
-}
-
-interface EmergencyLocation {
-  id: string
-  type: string
-  location: [number, number]
-  name: string
-}
-
-interface Station {
-  id: string
-  name: string
-  location: {
-    latitude: number
-    longitude: number
-  }
-  address: string
-  contact: string
-}
+// Initialize Mapbox token
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
 
 interface MapProps {
-  vehicles: Vehicle[]
-  emergencyLocations: EmergencyLocation[]
-  fireStations: Station[]
-  policeStations: Station[]
-  ambulanceStations: Station[]
+  paths: Array<{
+    start: [number, number];
+    end: [number, number];
+    vehicleDensity: number;
+  }>;
+  markers: Array<{
+    position: [number, number];
+    type: string;
+    confidence?: number;
+  }>;
+  center?: [number, number];
+  zoom?: number;
+  fireEngineIcon?: string;
+  policeVehicleIcon?: string;
 }
 
-export default function Map({
-  vehicles,
-  emergencyLocations,
-  fireStations,
-  policeStations,
-  ambulanceStations
-}: MapProps) {
-  const mapContainer = useRef<HTMLDivElement>(null)
-  const [map, setMap] = useState<mapboxgl.Map | null>(null)
-  const markersRef = useRef<mapboxgl.Marker[]>([])
+const getMarkerColor = (type: string): string => {
+  return type.toLowerCase().includes('ambulance') ? 'blue' :
+         type.toLowerCase().includes('fire') ? 'red' :
+         type.toLowerCase().includes('police') ? 'orange' : 'gray';
+};
 
+const Map: React.FC<MapProps> = ({
+  paths,
+  markers,
+  center = [81.7800, 16.9927], // Rajahmundry coordinates (lng, lat)
+  zoom = 12,
+  fireEngineIcon,
+  policeVehicleIcon
+}) => {
+  const mapContainer = useRef<HTMLDivElement>(null);
+  const map = useRef<mapboxgl.Map | null>(null);
+  const markerRefs = useRef<mapboxgl.Marker[]>([]);
+  const [mapLoaded, setMapLoaded] = useState(false);
+
+  // Initialize map
   useEffect(() => {
-    if (!mapContainer.current || map) return
+    if (map.current || !mapContainer.current) return;
 
-    if (!process.env.NEXT_PUBLIC_MAPBOX_TOKEN) {
-      console.error("Mapbox token missing")
-      return
-    }
-
-    mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN
-
-    const initializeMap = new mapboxgl.Map({
+    map.current = new mapboxgl.Map({
       container: mapContainer.current,
-      style: "mapbox://styles/mapbox/streets-v11",
-      center: [81.7751, 16.9945], // Center of Rajamendry
-      zoom: 12,
-      minZoom: 3,
-      maxZoom: 15,
-      maxBounds: [
-        [68.7, 6.5],  // Southwest coordinates of India
-        [97.25, 35.5] // Northeast coordinates of India
-      ]
-    })
+      style: 'mapbox://styles/mapbox/streets-v12',
+      center: center,
+      zoom: zoom,
+      attributionControl: true
+    });
 
-    initializeMap.addControl(new mapboxgl.NavigationControl(), "top-right")
-
-    initializeMap.on('load', () => {
-      setMap(initializeMap)
-    })
+    map.current.on('load', () => {
+      setMapLoaded(true);
+    });
 
     return () => {
-      markersRef.current.forEach(marker => marker.remove())
-      initializeMap.remove()
-    }
-  }, [])
+      map.current?.remove();
+      map.current = null;
+    };
+  }, []);
 
+  // Handle markers
   useEffect(() => {
-    if (!map) return
+    if (!map.current || !mapLoaded) return;
 
-    // Remove existing markers
-    markersRef.current.forEach(marker => marker.remove())
-    markersRef.current = []
+    // Clear existing markers
+    markerRefs.current.forEach(marker => marker.remove());
+    markerRefs.current = [];
 
-    // Add fire stations (orange markers)
-    fireStations.forEach((station) => {
-      const el = document.createElement("div")
-      el.className = "w-5 h-5 rounded-full bg-orange-600 border-2 border-white shadow-md"
+    // Add new markers
+    markers.forEach(({ position, type, confidence }) => {
+      const el = document.createElement('div');
+      el.className = 'marker';
+      el.style.width = '15px';
+      el.style.height = '15px';
+      el.style.borderRadius = '50%';
+      el.style.backgroundColor = getMarkerColor(type);
+      el.style.border = '2px solid white';
+      el.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
 
-      let marker: mapboxgl.Marker | null = null;
-      if (station.location.latitude && station.location.longitude) {
-        marker = new mapboxgl.Marker(el)
-          .setLngLat([station.location.longitude, station.location.latitude])
-          .setPopup(
-            new mapboxgl.Popup({ offset: 25 }).setHTML(
-              `<div class="p-2">
-                <h3 class="font-bold text-orange-600">${station.name}</h3>
-                <p class="text-gray-600">${station.address}</p>
-                <p class="text-gray-600">Contact: ${station.contact}</p>
-              </div>`
-            )
-          )
-          .addTo(map);
-
-        if (marker) {
-          markersRef.current.push(marker);
-        }
-      } else {
-        console.error(`Invalid location for station: ${station.name}`, station.location);
-      }
-    })
-
-    // Add police stations (blue markers)
-    policeStations.forEach((station) => {
-      const el = document.createElement("div")
-      el.className = "w-5 h-5 rounded-full bg-blue-600 border-2 border-white shadow-md"
-
-      let marker: mapboxgl.Marker | null = null;
-      if (station.location.latitude && station.location.longitude) {
-        marker = new mapboxgl.Marker(el)
-          .setLngLat([station.location.longitude, station.location.latitude])
-          .setPopup(
-            new mapboxgl.Popup({ offset: 25 }).setHTML(
-              `<div class="p-2">
-                <h3 class="font-bold text-blue-600">${station.name}</h3>
-                <p class="text-gray-600">${station.address}</p>
-                <p class="text-gray-600">Contact: ${station.contact}</p>
-              </div>`
-            )
-          )
-          .addTo(map);
-
-        if (marker) {
-          markersRef.current.push(marker);
-        }
-      } else {
-        console.error(`Invalid location for station: ${station.name}`, station.location);
-      }
-    })
-
-    // Add ambulance stations (red markers)
-    ambulanceStations.forEach((station) => {
-      const el = document.createElement("div")
-      el.className = "w-5 h-5 rounded-full bg-red-600 border-2 border-white shadow-md"
-
-      let marker: mapboxgl.Marker | null = null;
-      if (station.location.latitude && station.location.longitude) {
-        marker = new mapboxgl.Marker(el)
-          .setLngLat([station.location.longitude, station.location.latitude])
-          .setPopup(
-            new mapboxgl.Popup({ offset: 25 }).setHTML(
-              `<div class="p-2">
-                <h3 class="font-bold text-red-600">${station.name}</h3>
-                <p class="text-gray-600">${station.address}</p>
-                <p class="text-gray-600">Contact: ${station.contact}</p>
-              </div>`
-            )
-          )
-          .addTo(map);
-
-        if (marker) {
-          markersRef.current.push(marker);
-        }
-      } else {
-        console.error(`Invalid location for station: ${station.name}`, station.location);
-      }
-    })
-
-    // Add active vehicles (purple markers)
-    vehicles.forEach((vehicle) => {
-      const el = document.createElement("div")
-      el.className = "w-5 h-5 rounded-full bg-indigo-600 border-2 border-white shadow-md animate-pulse"
-
+      if (position[0] >= -90 && position[0] <= 90 && position[1] >= -180 && position[1] <= 180) {
       const marker = new mapboxgl.Marker(el)
-        .setLngLat(vehicle.location)
-        .setPopup(
-          new mapboxgl.Popup({ offset: 25 }).setHTML(
-            `<div class="p-2">
-              <h3 class="font-bold text-indigo-600">${vehicle.type}</h3>
-              <p class="text-gray-600">ID: ${vehicle.id}</p>
-              <p class="text-gray-600">Status: ${vehicle.status}</p>
-            </div>`
-          )
-        )
-        .addTo(map)
+        .setLngLat([position[1], position[0]])
+        .setPopup(new mapboxgl.Popup().setHTML(`<h3>${type}</h3><p>Confidence: ${confidence ? (confidence * 100).toFixed(1) : 'N/A'}%</p>`))
+        .addTo(map.current!);
 
-      markersRef.current.push(marker)
-    })
+        markerRefs.current.push(marker);
+      }
+    });
+  }, [markers, mapLoaded]);
 
-// Add emergency locations (yellow markers)
-if (Array.isArray(emergencyLocations)) {
-  emergencyLocations.forEach((location) => {
-      const el = document.createElement("div")
-      el.className = "w-5 h-5 rounded-full bg-yellow-400 border-2 border-white shadow-md animate-ping"
+  // Handle paths
+  useEffect(() => {
+    if (!map.current || !mapLoaded) return;
 
-      const marker = new mapboxgl.Marker(el)
-        .setLngLat(location.location)
-        .setPopup(
-          new mapboxgl.Popup({ offset: 25 }).setHTML(
-            `<div class="p-2">
-              <h3 class="font-bold text-yellow-600">${location.name}</h3>
-              <p class="text-gray-600">Type: ${location.type}</p>
-            </div>`
-          )
-        )
-        .addTo(map)
+    // Remove existing paths
+    if (map.current.getSource('routes')) {
+      map.current.removeLayer('routes');
+      map.current.removeSource('routes');
+    }
 
-      markersRef.current.push(marker)
-    })
-  }
-}, [vehicles, emergencyLocations, fireStations, policeStations, ambulanceStations, map])
+    if (paths.length > 0) {
+      const geojson = {
+        type: 'Feature',
+        properties: {},
+        geometry: {
+          type: 'LineString',
+          coordinates: paths.flatMap(path => [
+            [path.start[1], path.start[0]],
+            [path.end[1], path.end[0]]
+          ])
+        }
+      };
+
+      map.current.addSource('routes', {
+        type: 'geojson',
+        data: geojson as any
+      });
+
+      map.current.addLayer({
+        id: 'routes',
+        type: 'line',
+        source: 'routes',
+        layout: {
+          'line-join': 'round',
+          'line-cap': 'round'
+        },
+        paint: {
+          'line-color': '#3b82f6',
+          'line-width': 3,
+          'line-opacity': 0.8
+        }
+      });
+    }
+  }, [paths, mapLoaded]);
 
   return (
-    <div className="flex flex-col h-full">
+    <div
+      ref={mapContainer}
+      className="w-full h-[400px] rounded-lg border border-gray-200 relative z-0 grid grid-cols-2 gap-4"
+    >
+      {fireEngineIcon && (
+        <div
+          className="absolute top-4 left-4 w-8 h-8 rounded-full bg-red-500"
+        />
+      )}
+      {policeVehicleIcon && (
+        <div
+          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-orange-500"
+        />
+      )}
       <div
-        ref={mapContainer}
-        className="h-full w-full rounded-lg overflow-hidden min-h-[400px]"
+        className="absolute top-4 left-24 w-8 h-8 rounded-full bg-blue-500"
       />
+      <div
+        className="absolute bottom-16 left-4 w-8 h-8 rounded-full bg-blue-500"
+      />
+      <div className="absolute bottom-4 left-4 w-8 h-8 rounded-full bg-blue-500">
+        <span className="text-white">10:45</span>
+      </div>
     </div>
-  )
-}
+  );
+};
+
+export default Map;
