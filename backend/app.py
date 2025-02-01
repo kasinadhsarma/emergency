@@ -208,7 +208,8 @@ async def detect_video(
                 "emergencyType": "MEDICAL" if emergency_detected else None,
                 "timestamp": datetime.now().isoformat(),
                 "processedImage": processed_image,
-                "detectedVehicles": detected_vehicles  # Add detected vehicles to response
+                "detectedVehicles": detected_vehicles,  # Add detected vehicles to response
+                "status": "Emergency" if emergency_detected else "Clear"
             }
         )
     except Exception as e:
