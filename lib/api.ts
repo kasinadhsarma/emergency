@@ -52,7 +52,11 @@ export const detectEmergencyInImage = async (file: File): Promise<DetectionRespo
   const result = await response.json();
   return {
     ...result,
-    originalImage: originalImageUrl
+    originalImage: originalImageUrl,
+    status: result.emergencyDetected ? "Emergency" : "Clear",
+    type: result.emergencyType,
+    confidence: result.confidence,
+    detectedVehicles: result.detections.map(det => det.class_name).join(', ')
   };
 };
 

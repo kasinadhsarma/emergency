@@ -243,6 +243,7 @@ async def detect_image(
         # Process results
         emergency_detected = len(detections) > 0
         max_confidence = max((d['confidence'] for d in detections), default=0.0)
+        detected_vehicles = [d['class_name'] for d in detections]
 
         # Schedule cleanup
         background_tasks.add_task(cleanup_file, filepath)
@@ -256,7 +257,8 @@ async def detect_image(
                 "confidence": max_confidence,
                 "emergencyType": "MEDICAL" if emergency_detected else None,
                 "timestamp": datetime.now().isoformat(),
-                "processedImage": processed_image  # Add processed image to response
+                "processedImage": processed_image,  # Add processed image to response
+                "detectedVehicles": detected_vehicles  # Add detected vehicles to response
             }
         )
 
