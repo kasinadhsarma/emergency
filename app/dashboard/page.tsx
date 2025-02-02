@@ -37,6 +37,7 @@ const UserDashboard: React.FC = () => {
   const [detectionResults, setDetectionResults] = useState<DetectionResponse | null>(null);
   const [activeEmergency, setActiveEmergency] = useState<boolean>(false);
   const [selectedService, setSelectedService] = useState<EmergencyType>('MEDICAL');
+  const [paths, setPaths] = useState<Array<{ start: [number, number]; end: [number, number]; vehicleDensity: number }>>([]);
 
   // Cleanup URLs when component unmounts or new media is uploaded
   useEffect(() => {
@@ -89,6 +90,14 @@ const UserDashboard: React.FC = () => {
       });
       if (results.emergencyDetected) {
         setActiveEmergency(true);
+        const nearestStation = getNearestStation(results.detections[0].class_name);
+        if (nearestStation) {
+          setPaths([{
+            start: [results.detections[0].bbox[0], results.detections[0].bbox[1]],
+            end: [nearestStation.location.lat, nearestStation.location.lng],
+            vehicleDensity: 0 // Placeholder, replace with actual density if available
+          }]);
+        }
       }
     } catch (error) {
       console.error("Error processing video:", error);
@@ -127,6 +136,14 @@ const UserDashboard: React.FC = () => {
       });
       if (results.emergencyDetected) {
         setActiveEmergency(true);
+        const nearestStation = getNearestStation(results.detections[0].class_name);
+        if (nearestStation) {
+          setPaths([{
+            start: [results.detections[0].bbox[0], results.detections[0].bbox[1]],
+            end: [nearestStation.location.lat, nearestStation.location.lng],
+            vehicleDensity: 0 // Placeholder, replace with actual density if available
+          }]);
+        }
       }
     } catch (error) {
       console.error("Error processing image:", error);
@@ -140,6 +157,18 @@ const UserDashboard: React.FC = () => {
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  const getNearestStation = (vehicleType: string): StationLocation | null => {
+    const stationsByType = {
+      'Ambulance': stations.ambulanceStations,
+      'Fire_Engine': stations.fireStations,
+      'Police': stations.policeStations
+    };
+    const relevantStations = stationsByType[vehicleType] || [];
+    if (relevantStations.length === 0) return null;
+    // For simplicity, return the first station. In a real app, you'd calculate the nearest.
+    return relevantStations[0];
   };
 
   // Status badge component with loading state
@@ -289,7 +318,7 @@ const UserDashboard: React.FC = () => {
               <CardContent>
                 <div className="h-96">
                   <Map
-                    paths={[]}
+                    paths={paths}
                     markers={
                       detectionResults?.detections.map((detection) => ({
                         position: [detection.bbox[0], detection.bbox[1]],

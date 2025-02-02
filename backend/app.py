@@ -12,6 +12,8 @@ from utils.detection import EmergencyVehicleDetector
 import base64
 from io import BytesIO
 from PIL import Image
+from utils.pathfinding import calculate_optimal_path
+from utils.location import get_nearest_stations, bbox_to_location
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -194,6 +196,18 @@ async def detect_video(
         emergency_detected = len(detections) > 0
         max_confidence = max((d['confidence'] for d in detections), default=0.0)
         
+        # Calculate routes for detected emergencies
+        routes = []
+        if emergency_detected:
+            for det in detections:
+                bbox = det['bbox']
+                location = bbox_to_location(bbox, frame.shape[:2])
+                nearest_stations = get_nearest_stations(location, det['class_name'])
+                if nearest_stations:
+                    nearest_station = nearest_stations[0]
+                    route = calculate_optimal_path(location, nearest_station['location'])
+                    routes.append(route)
+        
         # Schedule cleanup
         background_tasks.add_task(cleanup_file, filepath)
         
@@ -206,7 +220,8 @@ async def detect_video(
                 "confidence": max_confidence,
                 "emergencyType": "MEDICAL" if emergency_detected else None,
                 "timestamp": datetime.now().isoformat(),
-                "processedImage": processed_image  # Add processed image to response
+                "processedImage": processed_image,  # Add processed image to response
+                "routes": routes  # Add routes to response
             }
         )
     except Exception as e:
@@ -255,11 +270,23 @@ async def detect_image(
         emergency_detected = False
 
         # Check for emergency vehicles
+        routes = []
         for vehicle in vehicles_detected:
             if vehicle in vehicle_to_emergency:
                 emergency_detected = True
                 emergency_type = vehicle_to_emergency[vehicle]
                 break
+
+        # Calculate routes for detected emergencies
+        if emergency_detected:
+            for det in detections:
+                bbox = det['bbox']
+                location = bbox_to_location(bbox, (img.shape[1], img.shape[0]))
+                nearest_stations = get_nearest_stations(location, det['class_name'])
+                if nearest_stations:
+                    nearest_station = nearest_stations[0]
+                    route = calculate_optimal_path(location, nearest_station['location'])
+                    routes.append(route)
 
         return JSONResponse(
             status_code=200,
@@ -272,7 +299,8 @@ async def detect_image(
                 "type": emergency_type,
                 "timestamp": datetime.now().isoformat(),
                 "processedImage": processed_image,
-                "detectedVehicles": ", ".join(vehicles_detected) if vehicles_detected else ""
+                "detectedVehicles": ", ".join(vehicles_detected) if vehicles_detected else "",
+                "routes": routes  # Add routes to response
             }
         )
 
@@ -305,6 +333,30 @@ async def get_stations():
             ]
         }
     )
+
+@app.post("/api/route")
+async def calculate_route(
+    start_lat: float,
+    start_lng: float,
+    end_lat: float,
+    end_lng: float,
+    emergency_type: str
+):
+    """
+    Calculate optimal route from start to end location
+    """
+    try:
+        start = [start_lat, start_lng]
+        end = [end_lat, end_lng]
+        route = calculate_optimal_path(start, end, emergency_type)
+        return JSONResponse(
+            status_code=200,
+            content=route
+        )
+    except Exception as e:
+        logger.error(f"Error calculating route: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
     """Handle 404 errors"""

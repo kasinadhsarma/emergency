@@ -86,6 +86,28 @@ export const detectEmergencyInImage = async (file: File): Promise<DetectionRespo
   };
 };
 
+export const fetchRouteData = async (start: [number, number], end: [number, number], emergencyType: EmergencyType) => {
+  const response = await fetch(`${API_URL}/api/route`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      start_lat: start[0],
+      start_lng: start[1],
+      end_lat: end[0],
+      end_lng: end[1],
+      emergency_type: emergencyType
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error('Failed to fetch route data');
+  }
+
+  return response.json();
+};
+
 export async function getEmergencyLocations() {
   // Implement in future
   return [];
