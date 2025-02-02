@@ -3,7 +3,7 @@ import numpy as np
 from ultralytics import YOLO
 import os
 from typing import List, Dict, Union
-from ..image_detection import ImageDetector  # Use relative import
+from image_detection import ImageDetector  # Use absolute import
 
 class EmergencyVehicleDetector(ImageDetector):
     """
