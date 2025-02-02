@@ -36,7 +36,7 @@ class EmergencyVehicleDetector(ImageDetector):
             x1, y1, x2, y2, conf, cls = r
             detection = {
                 'class_name': results.names[int(cls)],
-                'confidence': round(float(conf), 3),
+                'confidence': round(float(conf) * 100, 3),  # Convert to percentage
                 'bbox': [int(x1), int(y1), int(x2), int(y2)]
             }
 
@@ -103,7 +103,7 @@ class EmergencyVehicleDetector(ImageDetector):
 
                 detection = {
                     'class_name': class_name,
-                    'confidence': conf,
+                    'confidence': conf * 100,  # Convert to percentage
                     'bbox': [int(x1), int(y1), int(x2), int(y2)]
                 }
                 detections.append(detection)

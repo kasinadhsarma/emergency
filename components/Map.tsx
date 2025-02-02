@@ -5,7 +5,7 @@ import mapboxgl from "mapbox-gl";
 import "mapbox-gl/dist/mapbox-gl.css";
 
 // Initialize Mapbox token
-mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "";
+mapboxgl.accessToken = process.env.NEXT_PUBLIC_MAPBOX_TOKEN || "pk.eyJ1Ijoia2FzaW5hZGhzYXJtYSIsImEiOiJjbHQya2RoNTEwaWxpMm1xYjFhNm5pb2JzIn0.NQJMGBAig4N4YwUG95L8Ww";
 
 interface MapProps {
   paths: Array<{
@@ -25,15 +25,16 @@ interface MapProps {
 }
 
 const getMarkerColor = (type: string): string => {
-  return type.toLowerCase().includes('ambulance') ? 'blue' :
-         type.toLowerCase().includes('fire') ? 'red' :
-         type.toLowerCase().includes('police') ? 'orange' : 'gray';
+  return type.toLowerCase().includes('ambulance') ? '#3b82f6' :  // Blue
+         type.toLowerCase().includes('fire') ? '#ef4444' :       // Red
+         type.toLowerCase().includes('police') ? '#f97316' :     // Orange
+         '#6b7280';  // Gray (default)
 };
 
 const Map: React.FC<MapProps> = ({
   paths,
   markers,
-  center = [81.7800, 16.9927], // Rajahmundry coordinates (lng, lat)
+  center = [16.9927, 81.7800], // Rajahmundry coordinates (lat, lng)
   zoom = 12,
   fireEngineIcon,
   policeVehicleIcon
@@ -50,7 +51,7 @@ const Map: React.FC<MapProps> = ({
     map.current = new mapboxgl.Map({
       container: mapContainer.current,
       style: 'mapbox://styles/mapbox/streets-v12',
-      center: center,
+      center: [center[1], center[0]], // Convert to [lng, lat] for Mapbox
       zoom: zoom,
       attributionControl: true
     });
@@ -77,18 +78,25 @@ const Map: React.FC<MapProps> = ({
     markers.forEach(({ position, type, confidence }) => {
       const el = document.createElement('div');
       el.className = 'marker';
-      el.style.width = '15px';
-      el.style.height = '15px';
+      el.style.width = '20px';
+      el.style.height = '20px';
       el.style.borderRadius = '50%';
       el.style.backgroundColor = getMarkerColor(type);
-      el.style.border = '2px solid white';
-      el.style.boxShadow = '0 0 4px rgba(0,0,0,0.3)';
+      el.style.border = '3px solid white';
+      el.style.boxShadow = '0 0 6px rgba(0,0,0,0.4)';
 
-      if (position[0] >= -90 && position[0] <= 90 && position[1] >= -180 && position[1] <= 180) {
-      const marker = new mapboxgl.Marker(el)
-        .setLngLat([position[1], position[0]])
-        .setPopup(new mapboxgl.Popup().setHTML(`<h3>${type}</h3><p>Confidence: ${confidence ? (confidence * 100).toFixed(1) : 'N/A'}%</p>`))
-        .addTo(map.current!);
+      // Validate coordinates
+      const [lat, lng] = position;
+      if (lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+        const marker = new mapboxgl.Marker(el)
+          .setLngLat([lng, lat])  // Mapbox expects [lng, lat]
+          .setPopup(new mapboxgl.Popup().setHTML(`
+            <div class="p-2">
+              <h3 class="font-bold">${type}</h3>
+              <p>Confidence: ${confidence ? (confidence * 100).toFixed(1) : 'N/A'}%</p>
+            </div>
+          `))
+          .addTo(map.current!);
 
         markerRefs.current.push(marker);
       }
@@ -112,7 +120,7 @@ const Map: React.FC<MapProps> = ({
         geometry: {
           type: 'LineString',
           coordinates: paths.flatMap(path => [
-            [path.start[1], path.start[0]],
+            [path.start[1], path.start[0]],  // Convert [lat, lng] to [lng, lat] for Mapbox
             [path.end[1], path.end[0]]
           ])
         }
@@ -133,7 +141,7 @@ const Map: React.FC<MapProps> = ({
         },
         paint: {
           'line-color': '#3b82f6',
-          'line-width': 3,
+          'line-width': 4,
           'line-opacity': 0.8
         }
       });
@@ -143,28 +151,8 @@ const Map: React.FC<MapProps> = ({
   return (
     <div
       ref={mapContainer}
-      className="w-full h-[400px] rounded-lg border border-gray-200 relative z-0 grid grid-cols-2 gap-4"
-    >
-      {fireEngineIcon && (
-        <div
-          className="absolute top-4 left-4 w-8 h-8 rounded-full bg-red-500"
-        />
-      )}
-      {policeVehicleIcon && (
-        <div
-          className="absolute top-4 right-4 w-8 h-8 rounded-full bg-orange-500"
-        />
-      )}
-      <div
-        className="absolute top-4 left-24 w-8 h-8 rounded-full bg-blue-500"
-      />
-      <div
-        className="absolute bottom-16 left-4 w-8 h-8 rounded-full bg-blue-500"
-      />
-      <div className="absolute bottom-4 left-4 w-8 h-8 rounded-full bg-blue-500">
-        <span className="text-white">10:45</span>
-      </div>
-    </div>
+      className="w-full h-full min-h-[400px] rounded-lg border border-gray-200 relative"
+    />
   );
 };
 

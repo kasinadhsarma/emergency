@@ -31,18 +31,18 @@ def get_nearest_stations(location: List[float], emergency_type: str, stations: D
         # Mock data - in production, this would come from a database
         stations = {
             'MEDICAL': [
-                {'id': 1, 'name': 'Government General Hospital', 'location': [17.0005, 81.7800]},
-                {'id': 2, 'name': 'Hope Hospital', 'location': [16.9921, 81.7743]},
-                {'id': 3, 'name': 'KIMS Hospital', 'location': [16.9867, 81.7889]}
+                {'id': 1, 'name': 'Government General Hospital', 'location': {'lat': 17.0005, 'lng': 81.7800}},
+                {'id': 2, 'name': 'Hope Hospital', 'location': {'lat': 16.9921, 'lng': 81.7743}},
+                {'id': 3, 'name': 'KIMS Hospital', 'location': {'lat': 16.9867, 'lng': 81.7889}}
             ],
             'FIRE': [
-                {'id': 4, 'name': 'Fire Station Rajahmundry', 'location': [16.9891, 81.7840]},
-                {'id': 5, 'name': 'District Fire Office', 'location': [16.9927, 81.7756]}
+                {'id': 4, 'name': 'Fire Station Rajahmundry', 'location': {'lat': 16.9891, 'lng': 81.7840}},
+                {'id': 5, 'name': 'District Fire Office', 'location': {'lat': 16.9927, 'lng': 81.7756}}
             ],
             'POLICE': [
-                {'id': 6, 'name': 'Three Town Police Station', 'location': [16.9927, 81.7875]},
-                {'id': 7, 'name': 'Two Town Police Station', 'location': [16.9867, 81.7830]},
-                {'id': 8, 'name': 'One Town Police Station', 'location': [17.0012, 81.7799]}
+                {'id': 6, 'name': 'Three Town Police Station', 'location': {'lat': 16.9927, 'lng': 81.7875}},
+                {'id': 7, 'name': 'Two Town Police Station', 'location': {'lat': 16.9867, 'lng': 81.7830}},
+                {'id': 8, 'name': 'One Town Police Station', 'location': {'lat': 17.0012, 'lng': 81.7799}}
             ]
         }
 
@@ -53,7 +53,8 @@ def get_nearest_stations(location: List[float], emergency_type: str, stations: D
     # Calculate distances to all relevant stations
     stations_with_distances = []
     for station in relevant_stations:
-        distance = calculate_distance(location, station['location'])
+        station_location = [station['location']['lat'], station['location']['lng']]
+        distance = calculate_distance(location, station_location)
         stations_with_distances.append({
             **station,
             'distance': distance
@@ -64,7 +65,7 @@ def get_nearest_stations(location: List[float], emergency_type: str, stations: D
     return sorted_stations[:3]  # Return top 3 nearest stations
 
 def bbox_to_location(bbox: List[int], image_size: Tuple[int, int], 
-                    reference_coords: Optional[List[float]] = None) -> List[float]:
+                    reference_coords: Optional[List[float]] = None) -> Dict[str, float]:
     """
     Convert bounding box coordinates to geographical coordinates
     If reference coordinates are not provided, returns relative position
@@ -79,7 +80,7 @@ def bbox_to_location(bbox: List[int], image_size: Tuple[int, int],
     
     if reference_coords is None:
         # Return normalized coordinates if no reference point
-        return [norm_y, norm_x]  # Latitude, Longitude format
+        return {"lat": norm_y, "lng": norm_x}
     
     # Calculate actual coordinates based on reference point
     # This is a simplified calculation - in production you'd need proper geo-referencing
@@ -89,7 +90,7 @@ def bbox_to_location(bbox: List[int], image_size: Tuple[int, int],
     lat = reference_coords[0] + (norm_y - 0.5) * lat_range
     lon = reference_coords[1] + (norm_x - 0.5) * lon_range
     
-    return [lat, lon]
+    return {"lat": lat, "lng": lon}
 
 def get_path_traffic_density(start: List[float], end: List[float]) -> float:
     """

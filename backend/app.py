@@ -122,20 +122,21 @@ async def process_and_encode_image(filepath: str, detections: list) -> str:
 
         # Draw detections
         for det in detections:
-            bbox = det['bbox']
+            # Ensure bbox values are floats for drawing
+            bbox = [float(x) for x in det['bbox']]
             conf = det['confidence']
             class_name = det['class_name']
 
-            # Draw box
+            # Draw box with integer coordinates
             cv2.rectangle(img,
-                         (bbox[0], bbox[1]),
-                         (bbox[2], bbox[3]),
+                         (int(bbox[0]), int(bbox[1])),
+                         (int(bbox[2]), int(bbox[3])),
                          (0, 255, 0), 2)
 
             # Draw label
             label = f"{class_name} {conf:.2f}"
             cv2.putText(img, label,
-                       (bbox[0], bbox[1] - 10),
+                       (int(bbox[0]), int(bbox[1] - 10)),
                        cv2.FONT_HERSHEY_SIMPLEX,
                        0.5, (0, 255, 0), 2)
 
@@ -204,8 +205,22 @@ async def detect_video(
         routes = []
         if emergency_detected:
             for det in detections:
-                bbox = det['bbox']
-                location = bbox_to_location(bbox, frame.shape[:2])
+                # Ensure bbox values are floats
+                bbox = [float(x) for x in det['bbox']]
+                det['bbox'] = bbox  # Update the detection with float values
+                
+                # Convert detection bbox to lat/lng coordinates
+                try:
+                    location_obj = bbox_to_location(
+                        [float(x) for x in bbox],  # Ensure bbox values are float
+                        (int(frame.shape[1]), int(frame.shape[0])),  # Ensure dimensions are int
+                        reference_coords=[16.9927, 81.7800]  # Rajahmundry reference coordinates [lat, lng]
+                    )
+                    det['location'] = location_obj  # Add location to detection object
+                except Exception as e:
+                    logger.error(f"Error converting bbox to location: {e}")
+                    location_obj = {"lat": 16.9927, "lng": 81.7800}  # Default to Rajahmundry center
+                location = [location_obj['lat'], location_obj['lng']]
                 nearest_stations = get_nearest_stations(location, det['class_name'])
                 if nearest_stations:
                     nearest_station = nearest_stations[0]
@@ -264,7 +279,7 @@ async def detect_image(
 
         # Get actual vehicle type and confidence from detections
         vehicles_detected = [d['class_name'] for d in detections]
-        max_confidence = max((d['confidence'] for d in detections), default=0.0) * 100
+        max_confidence = max((d['confidence'] for d in detections), default=0.0)
 
         # Map vehicle types to emergency types
         vehicle_to_emergency = {
@@ -288,8 +303,22 @@ async def detect_image(
         if emergency_detected:
             img = cv2.imread(filepath)
             for det in detections:
-                bbox = det['bbox']
-                location = bbox_to_location(bbox, (img.shape[1], img.shape[0]))
+                # Ensure bbox values are floats
+                bbox = [float(x) for x in det['bbox']]
+                det['bbox'] = bbox  # Update the detection with float values
+                
+                # Convert detection bbox to lat/lng coordinates
+                try:
+                    location_obj = bbox_to_location(
+                        [float(x) for x in bbox],  # Ensure bbox values are float
+                        (int(img.shape[1]), int(img.shape[0])),  # Ensure dimensions are int
+                        reference_coords=[16.9927, 81.7800]  # Rajahmundry reference coordinates [lat, lng]
+                    )
+                    det['location'] = location_obj  # Add location to detection object
+                except Exception as e:
+                    logger.error(f"Error converting bbox to location: {e}")
+                    location_obj = {"lat": 16.9927, "lng": 81.7800}  # Default to Rajahmundry center
+                location = [location_obj['lat'], location_obj['lng']]
                 nearest_stations = get_nearest_stations(location, det['class_name'])
                 if nearest_stations:
                     nearest_station = nearest_stations[0]
@@ -332,16 +361,16 @@ async def get_stations():
         status_code=200,
         content={
             "ambulanceStations": [
-                {"id": 1, "name": "City Hospital", "latitude": 16.9927, "longitude": 81.7800, "type": "MEDICAL"},
-                {"id": 2, "name": "General Hospital", "latitude": 16.9827, "longitude": 81.7700, "type": "MEDICAL"}
+                {"id": 1, "name": "City Hospital", "location": {"lat": 16.9927, "lng": 81.7800}, "type": "MEDICAL"},
+                {"id": 2, "name": "General Hospital", "location": {"lat": 16.9827, "lng": 81.7700}, "type": "MEDICAL"}
             ],
             "fireStations": [
-                {"id": 3, "name": "Central Fire Station", "latitude": 16.9927, "longitude": 81.7900, "type": "FIRE"},
-                {"id": 4, "name": "North Fire Station", "latitude": 17.0027, "longitude": 81.7800, "type": "FIRE"}
+                {"id": 3, "name": "Central Fire Station", "location": {"lat": 16.9927, "lng": 81.7900}, "type": "FIRE"},
+                {"id": 4, "name": "North Fire Station", "location": {"lat": 17.0027, "lng": 81.7800}, "type": "FIRE"}
             ],
             "policeStations": [
-                {"id": 5, "name": "City Police HQ", "latitude": 16.9927, "longitude": 81.7700, "type": "POLICE"},
-                {"id": 6, "name": "Traffic Police Station", "latitude": 16.9827, "longitude": 81.7800, "type": "POLICE"}
+                {"id": 5, "name": "City Police HQ", "location": {"lat": 16.9927, "lng": 81.7700}, "type": "POLICE"},
+                {"id": 6, "name": "Traffic Police Station", "location": {"lat": 16.9827, "lng": 81.7800}, "type": "POLICE"}
             ]
         }
     )
