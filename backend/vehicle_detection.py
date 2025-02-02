@@ -23,33 +23,50 @@ class VehicleDetector:
         else:
             print("Error: Unsupported file format")
 
-    def _process_media(self, source: str, output_path: str = None):
-        if source.lower().endswith(('.jpg', '.jpeg', '.png')):
-            img = cv2.imread(source)
-            if img is None:
-                print(f"Error: Unable to read image {source}")
-                return
-            detections = self._run_inference(img)
-            result_img = self._draw_detections(img, detections)
-            cv2.imshow('Emergency Vehicle Detection', result_img)
-            cv2.waitKey(0)
-            cv2.destroyAllWindows()
-            if output_path:
-                cv2.imwrite(output_path, result_img)
+def _process_media(self, source: str, output_path: str = None):
+    img = None
+    if source.lower().endswith(('.jpg', '.jpeg', '.png')):
+        img = cv2.imread(source)
+        if img is None:
+            print(f"Error: Unable to read image {source}")
+            return
+        detections = self._run_inference(img)
+        result_img = self._draw_detections(img, detections)
+        cv2.imshow('Emergency Vehicle Detection', result_img)
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+        if output_path:
+            cv2.imwrite(output_path, result_img)
 
-            # Add location detection, nearest station finding, and routing
-            for detection in detections:
-                bbox = detection['bbox']
-                location = bbox_to_location(bbox, img.shape[:2])
-                detection['location'] = location
-                nearest_stations = get_nearest_stations(location, detection['class'])
-                detection['nearest_stations'] = nearest_stations
-                if nearest_stations:
-                    nearest_station = nearest_stations[0]
-                    route = get_path_traffic_density(location, nearest_station['location'])
-                    detection['route'] = route
-        else:
-            self._process_video(source, output_path)
+        # Add location detection, nearest station finding, and routing
+        for detection in detections:
+            bbox = detection['bbox']
+            location = bbox_to_location(bbox, img.shape[:2], reference_coords=[17.0005, 81.7800])  # Provide reference coordinates
+            if location is None:
+                print(f"Error: Unable to determine location for bbox {bbox}")
+                continue
+            detection['location'] = location
+            nearest_stations = get_nearest_stations(location, detection['class'])
+            detection['nearest_stations'] = nearest_stations
+            if nearest_stations:
+                nearest_station = nearest_stations[0]
+                route = get_path_traffic_density(location, nearest_station['location'])
+                detection['route'] = route
+    else:
+        self._process_video(source, output_path)
+
+    if img is not None:
+        # Add location detection, nearest station finding, and routing
+        for detection in detections:
+            bbox = detection['bbox']
+            location = bbox_to_location(bbox, img.shape[:2], reference_coords=[17.0005, 81.7800])  # Provide reference coordinates
+            detection['location'] = location
+            nearest_stations = get_nearest_stations(location, detection['class'])
+            detection['nearest_stations'] = nearest_stations
+            if nearest_stations:
+                nearest_station = nearest_stations[0]
+                route = get_path_traffic_density(location, nearest_station['location'])
+                detection['route'] = route
 
     def _run_inference(self, image: np.ndarray):
         results = self.model(image)

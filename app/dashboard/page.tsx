@@ -160,12 +160,13 @@ const UserDashboard: React.FC = () => {
   };
 
   const getNearestStation = (vehicleType: string): StationLocation | null => {
+    type StationType = 'Ambulance' | 'Fire_Engine' | 'Police';
     const stationsByType = {
       'Ambulance': stations.ambulanceStations,
       'Fire_Engine': stations.fireStations,
       'Police': stations.policeStations
     };
-    const relevantStations = stationsByType[vehicleType] || [];
+    const relevantStations = stationsByType[vehicleType as StationType] || [];
     if (relevantStations.length === 0) return null;
     // For simplicity, return the first station. In a real app, you'd calculate the nearest.
     return relevantStations[0];
