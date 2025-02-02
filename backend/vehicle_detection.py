@@ -6,6 +6,7 @@ import torchvision.transforms as T
 from ultralytics import YOLO
 from torch.cuda.amp import autocast
 from concurrent.futures import ThreadPoolExecutor
+from backend.utils.location import bbox_to_location, get_nearest_stations, get_path_traffic_density
 
 class VehicleDetector:
     def __init__(self, model_path: str = 'models/emergency_vehicle_detector_best.pt', batch_size: int = 4, num_threads: int = 4):
@@ -21,7 +22,7 @@ class VehicleDetector:
             self._process_media(source, output_path)
         else:
             print("Error: Unsupported file format")
-    
+
     def _process_media(self, source: str, output_path: str = None):
         if source.lower().endswith(('.jpg', '.jpeg', '.png')):
             img = cv2.imread(source)
@@ -35,9 +36,21 @@ class VehicleDetector:
             cv2.destroyAllWindows()
             if output_path:
                 cv2.imwrite(output_path, result_img)
+
+            # Add location detection, nearest station finding, and routing
+            for detection in detections:
+                bbox = detection['bbox']
+                location = bbox_to_location(bbox, img.shape[:2])
+                detection['location'] = location
+                nearest_stations = get_nearest_stations(location, detection['class'])
+                detection['nearest_stations'] = nearest_stations
+                if nearest_stations:
+                    nearest_station = nearest_stations[0]
+                    route = get_path_traffic_density(location, nearest_station['location'])
+                    detection['route'] = route
         else:
             self._process_video(source, output_path)
-    
+
     def _run_inference(self, image: np.ndarray):
         results = self.model(image)
         detections = []
@@ -53,15 +66,22 @@ class VehicleDetector:
                         'bbox': np.array([x1, y1, x2, y2])
                     })
         return detections
-    
+
     def _draw_detections(self, image: np.ndarray, detections):
         for det in detections:
             bbox = det['bbox'].astype(int)
             label = f"{det['class']} {det['confidence']:.2f}"
-            cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), (0, 255, 0), 2)
-            cv2.putText(image, label, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+            color = (0, 255, 0)  # Default color
+            if det['class'] == 'ambulance':
+                color = (0, 0, 255)  # Red for ambulance
+            elif det['class'] == 'police':
+                color = (255, 0, 0)  # Blue for police
+            elif det['class'] == 'firetruck':
+                color = (0, 255, 255)  # Yellow for firetruck
+            cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, 2)
+            cv2.putText(image, label, (bbox[0], bbox[1] - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
         return image
-    
+
     def _process_video(self, video_path: str, output_path: str = None):
         cap = cv2.VideoCapture(video_path)
         if not cap.isOpened():
@@ -77,7 +97,7 @@ class VehicleDetector:
                 break
             detections = self._run_inference(frame)
             frame_with_detections = self._draw_detections(frame, detections)
-            if output_path:
+            if output_path and out:
                 out.write(frame_with_detections)
             cv2.imshow('Emergency Vehicle Detection', frame_with_detections)
             if cv2.waitKey(1) & 0xFF == ord('q'):
