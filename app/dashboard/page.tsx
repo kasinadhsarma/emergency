@@ -175,7 +175,7 @@ const UserDashboard: React.FC = () => {
     };
     const relevantStations = stationsByType[vehicleType as StationType] || [];
     if (relevantStations.length === 0) return null;
-    return relevantStations[0];
+    return relevantStations[Math.floor(Math.random() * relevantStations.length)];
   };
 
   const ModelStatusBadge = () => {

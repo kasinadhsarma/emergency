@@ -60,9 +60,11 @@ def get_nearest_stations(location: List[float], emergency_type: str, stations: D
             'distance': distance
         })
 
-    # Sort by distance and return the nearest stations
+    # Sort by distance and return a random station
     sorted_stations = sorted(stations_with_distances, key=lambda x: x['distance'])
-    return sorted_stations[:3]  # Return top 3 nearest stations
+    if sorted_stations:
+        return [sorted_stations[np.random.randint(len(sorted_stations))]]
+    return []
 
 def bbox_to_location(bbox: List[int], image_size: Tuple[int, int], 
                     reference_coords: Optional[List[float]] = None) -> Dict[str, float]:
