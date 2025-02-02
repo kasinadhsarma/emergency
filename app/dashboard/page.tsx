@@ -160,15 +160,15 @@ const UserDashboard: React.FC = () => {
   const EmergencyStatusBadge: React.FC = () => (
     <Badge className={activeEmergency ? "bg-red-500" : "bg-green-500"}>
       {activeEmergency ? (
-        <div className="flex items-center gap-1">
+        <span className="flex items-center gap-1">
           <AlertTriangle className="h-4 w-4" />
           Active Emergency
-        </div>
+        </span>
       ) : (
-        <div className="flex items-center gap-1">
+        <span className="flex items-center gap-1">
           <CheckCircle2 className="h-4 w-4" />
           All Clear
-        </div>
+        </span>
       )}
     </Badge>
   );
@@ -209,11 +209,17 @@ const UserDashboard: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600">Nearest Hospital: 2.3 miles</p>
-                  <p className="text-sm text-gray-600">Available Units: 3</p>
-                  <Button className="w-full mt-4">Request Ambulance</Button>
-                </div>
+                <dl className="space-y-2">
+                  <div>
+                    <dd className="text-sm text-gray-600">Nearest Hospital: 2.3 miles</dd>
+                  </div>
+                  <div>
+                    <dd className="text-sm text-gray-600">Available Units: 3</dd>
+                  </div>
+                  <div className="mt-4">
+                    <Button className="w-full">Request Ambulance</Button>
+                  </div>
+                </dl>
               </CardContent>
             </Card>
 
@@ -225,11 +231,17 @@ const UserDashboard: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600">Nearest Station: 1.8 miles</p>
-                  <p className="text-sm text-gray-600">Available Units: 2</p>
-                  <Button className="w-full mt-4">Request Fire Service</Button>
-                </div>
+                <dl className="space-y-2">
+                  <div>
+                    <dd className="text-sm text-gray-600">Nearest Station: 1.8 miles</dd>
+                  </div>
+                  <div>
+                    <dd className="text-sm text-gray-600">Available Units: 2</dd>
+                  </div>
+                  <div className="mt-4">
+                    <Button className="w-full">Request Fire Service</Button>
+                  </div>
+                </dl>
               </CardContent>
             </Card>
 
@@ -241,11 +253,17 @@ const UserDashboard: React.FC = () => {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <div className="space-y-2">
-                  <p className="text-sm text-gray-600">Nearest Station: 1.5 miles</p>
-                  <p className="text-sm text-gray-600">Available Units: 4</p>
-                  <Button className="w-full mt-4">Request Police</Button>
-                </div>
+                <dl className="space-y-2">
+                  <div>
+                    <dd className="text-sm text-gray-600">Nearest Station: 1.5 miles</dd>
+                  </div>
+                  <div>
+                    <dd className="text-sm text-gray-600">Available Units: 4</dd>
+                  </div>
+                  <div className="mt-4">
+                    <Button className="w-full">Request Police</Button>
+                  </div>
+                </dl>
               </CardContent>
             </Card>
           </div>
@@ -258,14 +276,14 @@ const UserDashboard: React.FC = () => {
                   Emergency Response Map
                 </CardTitle>
                 <CardDescription>
-                  <div className="flex items-center gap-2">
-                    <div className="w-4 h-4 rounded-full bg-red-500"></div>
+                  <span className="flex items-center gap-2">
+                    <span className="inline-block w-4 h-4 rounded-full bg-red-500"></span>
                     <span>Fire Engine</span>
-                    <div className="w-4 h-4 rounded-full bg-orange-500"></div>
+                    <span className="inline-block w-4 h-4 rounded-full bg-orange-500"></span>
                     <span>Police Vehicle</span>
-                    <div className="w-4 h-4 rounded-full bg-blue-500"></div>
+                    <span className="inline-block w-4 h-4 rounded-full bg-blue-500"></span>
                     <span>Ambulance</span>
-                  </div>
+                  </span>
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -369,15 +387,27 @@ const UserDashboard: React.FC = () => {
                           <ShieldAlert className="mr-2 h-4 w-4" />
                           Police Emergency
                         </Button>
-                        <div className="p-4 bg-white shadow-md rounded-md">
+                        <section className="p-4 bg-white shadow-md rounded-md">
                           <h2 className="text-xl font-bold mb-4">Emergency Numbers</h2>
-                          <div className="space-y-2">
-                            <div><span className="font-semibold">Medical Emergency:</span> {emergencyNumbers.medical}</div>
-                            <div><span className="font-semibold">Fire Station:</span> {emergencyNumbers.fire}</div>
-                            <div><span className="font-semibold">Police Emergency:</span> {emergencyNumbers.police}</div>
-                            <div><span className="font-semibold">General Emergency:</span> {emergencyNumbers.general}</div>
-                          </div>
-                        </div>
+                          <dl className="space-y-2">
+                            <div className="flex justify-between">
+                              <dt className="font-semibold">Medical Emergency:</dt>
+                              <dd>{emergencyNumbers.medical}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                              <dt className="font-semibold">Fire Station:</dt>
+                              <dd>{emergencyNumbers.fire}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                              <dt className="font-semibold">Police Emergency:</dt>
+                              <dd>{emergencyNumbers.police}</dd>
+                            </div>
+                            <div className="flex justify-between">
+                              <dt className="font-semibold">General Emergency:</dt>
+                              <dd>{emergencyNumbers.general}</dd>
+                            </div>
+                          </dl>
+                        </section>
                       </div>
                     </DialogContent>
                   </Dialog>
@@ -406,7 +436,7 @@ const UserDashboard: React.FC = () => {
                       />
                     ) : (
                       <div className="flex items-center justify-center h-full">
-                        <p className="text-gray-500">No media uploaded</p>
+                        <span className="text-gray-500">No media uploaded</span>
                       </div>
                     )}
                   </div>
@@ -435,46 +465,54 @@ const UserDashboard: React.FC = () => {
                       />
                     ) : (
                       <div className="flex items-center justify-center h-full">
-                        <p className="text-gray-500">No analysis results</p>
+                        <span className="text-gray-500">No analysis results</span>
                       </div>
                     )}
                   </div>
                   {detectionResults && (
-<div className="p-4 bg-gray-50 rounded-lg">
-  <h3 className="font-semibold mb-2">Detection Summary</h3>
-  <div className="space-y-2">
-    <div className="flex justify-between">
-      <span>Status:</span>
-      <Badge
-        className={
-          detectionResults.emergencyDetected
-            ? "bg-red-400"
-            : "bg-green-400"
-        }
-      >
-        {detectionResults.emergencyDetected ? "Emergency" : "Clear"}
-      </Badge>
-    </div>
-    {detectionResults.type && (
-      <div className="flex justify-between">
-        <span>Type:</span>
-        <Badge>{detectionResults.type}</Badge>
-      </div>
-    )}
-    <div className="flex justify-between">
-      <span>Confidence:</span>
-      <Badge>{`${Math.max(0, detectionResults.confidence || 0).toFixed(1)}%`}</Badge>
-    </div>
-    {detectionResults.detectedVehicles && (
-      <div className="flex justify-between">
-        <span>Detected Vehicles:</span>
-        <Badge className="text-wrap">
-          {detectionResults.detectedVehicles || 'None detected'}
-        </Badge>
-      </div>
-    )}
-  </div>
-</div>
+                    <div className="p-4 bg-gray-50 rounded-lg">
+                      <h3 className="font-semibold mb-2">Detection Summary</h3>
+                      <dl className="space-y-2">
+                        <div className="flex justify-between">
+                          <dt>Status:</dt>
+                          <dd>
+                            <Badge
+                              className={
+                                detectionResults.emergencyDetected
+                                  ? "bg-red-400"
+                                  : "bg-green-400"
+                              }
+                            >
+                              {detectionResults.emergencyDetected ? "Emergency" : "Clear"}
+                            </Badge>
+                          </dd>
+                        </div>
+                        {detectionResults.type && (
+                          <div className="flex justify-between">
+                            <dt>Type:</dt>
+                            <dd>
+                              <Badge>{detectionResults.type}</Badge>
+                            </dd>
+                          </div>
+                        )}
+                        <div className="flex justify-between">
+                          <dt>Confidence:</dt>
+                          <dd>
+                            <Badge>{`${Math.max(0, detectionResults.confidence || 0).toFixed(1)}%`}</Badge>
+                          </dd>
+                        </div>
+                        {detectionResults.detectedVehicles && (
+                          <div className="flex justify-between">
+                            <dt>Detected Vehicles:</dt>
+                            <dd>
+                              <Badge className="text-wrap">
+                                {detectionResults.detectedVehicles || 'None detected'}
+                              </Badge>
+                            </dd>
+                          </div>
+                        )}
+                      </dl>
+                    </div>
                   )}
                 </CardContent>
               </Card>

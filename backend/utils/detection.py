@@ -3,9 +3,9 @@ import numpy as np
 from ultralytics import YOLO
 import os
 from typing import List, Dict, Union
-from backend.image_detection import ImageDetector
+from ..image_detection import ImageDetector  # Use relative import
 
-class EmergencyVehicleDetector:
+class EmergencyVehicleDetector(ImageDetector):
     """
     A class to handle emergency vehicle detection using a YOLO model
     """
@@ -17,12 +17,7 @@ class EmergencyVehicleDetector:
             model_path (str, optional): Path to the YOLO model file. If None,
                                       uses default path from project structure
         """
-        if model_path is None:
-            model_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'pick_best.pt')
-
-        self.model = YOLO(model_path)
-        self.confidence_threshold = 0.5
-        self.image_detector = ImageDetector(model_path=model_path)
+        super().__init__(model_path)
 
     def _process_detections(self, results, frame_number: int = None) -> List[Dict[str, Union[str, float, List[int]]]]:
         """

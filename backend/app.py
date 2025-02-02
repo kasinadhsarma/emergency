@@ -8,7 +8,7 @@ import numpy as np
 from datetime import datetime
 import shutil
 import logging
-from utils.detection import EmergencyVehicleDetector  # Remove old imports
+from .utils.detection import EmergencyVehicleDetector
 import base64
 from io import BytesIO
 from PIL import Image
