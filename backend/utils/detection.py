@@ -36,8 +36,8 @@ class EmergencyVehicleDetector(ImageDetector):
             x1, y1, x2, y2, conf, cls = r
             detection = {
                 'class_name': results.names[int(cls)],
-                'confidence': round(float(conf) * 100, 3),  # Convert to percentage
-                'bbox': [int(x1), int(y1), int(x2), int(y2)]
+                'confidence': round(float(conf), 3),  # Ensure confidence is float
+                'bbox': [float(x1), float(y1), float(x2), float(y2)]  # Ensure bbox values are floats
             }
 
             if frame_number is not None:
@@ -103,8 +103,8 @@ class EmergencyVehicleDetector(ImageDetector):
 
                 detection = {
                     'class_name': class_name,
-                    'confidence': conf * 100,  # Convert to percentage
-                    'bbox': [int(x1), int(y1), int(x2), int(y2)]
+                    'confidence': float(conf),  # Ensure confidence is float
+                    'bbox': [float(x1), float(y1), float(x2), float(y2)]  # Ensure bbox values are floats
                 }
                 detections.append(detection)
 
