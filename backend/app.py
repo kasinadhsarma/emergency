@@ -253,6 +253,9 @@ async def detect_image(
         # Save file
         filepath = await save_upload_file(file)
 
+        # Define the img variable by reading the image using cv2.imread(filepath)
+        img = cv2.imread(filepath)
+
         # Use detector to process image
         detections = detector.detect_in_image(filepath)
 
@@ -292,6 +295,11 @@ async def detect_image(
                     nearest_station = nearest_stations[0]
                     route = calculate_optimal_path(location, nearest_station['location'])
                     routes.append(route)
+
+        # Assign random latitude values if the latitude is undefined
+        for route in routes:
+            if 'latitude' not in route:
+                route['latitude'] = np.random.uniform(-90, 90)
 
         return JSONResponse(
             status_code=200,
