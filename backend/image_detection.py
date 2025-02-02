@@ -3,6 +3,7 @@ import numpy as np
 from ultralytics import YOLO
 import os
 from typing import List, Dict, Union
+from utils.location import bbox_to_location
 
 class ImageDetector:
     """
@@ -40,11 +41,21 @@ class ImageDetector:
             detection = {
                 'class_name': results.names[int(cls)],
                 'confidence': round(float(conf), 3),
-                'bbox': [int(x1), int(y1), int(x2), int(y2)]
+                'bbox': [float(x1), float(y1), float(x2), float(y2)]
             }
 
             if frame_number is not None:
                 detection['frame'] = frame_number
+
+            try:
+                location_obj = bbox_to_location(
+                    [float(x1), float(y1), float(x2), float(y2)],  # Ensure bbox values are float
+                    (int(results.imgs[0].shape[1]), int(results.imgs[0].shape[0])),  # Ensure dimensions are int
+                    reference_coords=[16.9927, 81.7800]  # Rajahmundry reference coordinates [lat, lng]
+                )
+                detection['location'] = location_obj  # Add location to detection object
+            except Exception as e:
+                detection['location'] = {"lat": 16.9927, "lng": 81.7800}  # Default to Rajahmundry center
 
             detections.append(detection)
 
@@ -107,8 +118,19 @@ class ImageDetector:
                 detection = {
                     'class_name': class_name,
                     'confidence': conf,
-                    'bbox': [int(x1), int(y1), int(x2), int(y2)]
+                    'bbox': [float(x1), float(y1), float(x2), float(y2)]
                 }
+
+                try:
+                    location_obj = bbox_to_location(
+                        [float(x1), float(y1), float(x2), float(y2)],  # Ensure bbox values are float
+                        (int(frame.shape[1]), int(frame.shape[0])),  # Ensure dimensions are int
+                        reference_coords=[16.9927, 81.7800]  # Rajahmundry reference coordinates [lat, lng]
+                    )
+                    detection['location'] = location_obj  # Add location to detection object
+                except Exception as e:
+                    detection['location'] = {"lat": 16.9927, "lng": 81.7800}  # Default to Rajahmundry center
+
                 detections.append(detection)
 
             return detections
