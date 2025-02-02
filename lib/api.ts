@@ -38,7 +38,7 @@ export const detectEmergencyInVideo = async (file: File): Promise<DetectionRespo
     ...result,
     originalImage: originalVideoUrl,
     status: emergencyDetected ? "Emergency" : "Clear",
-    type: emergencyDetected ? "EMERGENCY_VEHICLE" : undefined,
+    type: emergencyDetected ? detections[0]?.class_name || 'EMERGENCY_VEHICLE' : undefined,
     confidence: Math.max(...detections.map((det: Detection) => det.confidence * 100) || [0]),
     detectedVehicles: detections.map((det: Detection) => det.class_name).join(', '),
     emergencyDetected,

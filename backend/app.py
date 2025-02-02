@@ -124,7 +124,7 @@ async def process_and_encode_image(filepath: str, detections: list) -> str:
         for det in detections:
             # Ensure bbox values are floats for drawing
             bbox = [float(x) for x in det['bbox']]
-            conf = det['confidence']
+            conf = float(det['confidence'])
             class_name = det['class_name']
 
             # Draw box with integer coordinates
@@ -199,7 +199,7 @@ async def detect_video(
 
         # Process results
         emergency_detected = len(detections) > 0
-        max_confidence = max((d['confidence'] for d in detections), default=0.0)
+        max_confidence = max((float(d['confidence']) for d in detections), default=0.0)
 
         # Calculate routes for detected emergencies
         routes = []
@@ -279,7 +279,7 @@ async def detect_image(
 
         # Get actual vehicle type and confidence from detections
         vehicles_detected = [d['class_name'] for d in detections]
-        max_confidence = max((d['confidence'] for d in detections), default=0.0)
+        max_confidence = max((float(d['confidence']) for d in detections), default=0.0)
 
         # Map vehicle types to emergency types
         vehicle_to_emergency = {
