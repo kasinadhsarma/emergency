@@ -136,7 +136,7 @@ async def process_and_encode_image(filepath: str, detections: list) -> str:
             # Draw label
             label = f"{class_name} {conf:.2f}"
             cv2.putText(img, label,
-                       (int(bbox[0]), int(bbox[1] - 10)),
+                       (int(bbox[0]), int(bbox[1] - 10)),  # Ensure bbox[1] is an int
                        cv2.FONT_HERSHEY_SIMPLEX,
                        0.5, (0, 255, 0), 2)
 
