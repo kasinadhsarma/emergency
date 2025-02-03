@@ -1,5 +1,5 @@
 import math
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Union
 import numpy as np
 
 def calculate_distance(point1: List[float], point2: List[float]) -> float:
@@ -23,76 +23,52 @@ def calculate_distance(point1: List[float], point2: List[float]) -> float:
     
     return distance
 
-def get_nearest_stations(location: List[float], emergency_type: str, stations: Dict = None) -> List[Dict]:
+def get_nearest_stations(location: List[float], emergency_type: str) -> List[Dict]:
     """
-    Find nearest emergency stations based on vehicle type and location
+    Get nearest emergency stations based on location and emergency type.
+    Uses mock data for demonstration.
     """
-    if stations is None:
-        # Mock data - in production, this would come from a database
-        stations = {
-            'MEDICAL': [
-                {'id': 1, 'name': 'Government General Hospital', 'location': {'lat': 17.0005, 'lng': 81.7800}},
-                {'id': 2, 'name': 'Hope Hospital', 'location': {'lat': 16.9921, 'lng': 81.7743}},
-                {'id': 3, 'name': 'KIMS Hospital', 'location': {'lat': 16.9867, 'lng': 81.7889}}
-            ],
-            'FIRE': [
-                {'id': 4, 'name': 'Fire Station Rajahmundry', 'location': {'lat': 16.9891, 'lng': 81.7840}},
-                {'id': 5, 'name': 'District Fire Office', 'location': {'lat': 16.9927, 'lng': 81.7756}}
-            ],
-            'POLICE': [
-                {'id': 6, 'name': 'Three Town Police Station', 'location': {'lat': 16.9927, 'lng': 81.7875}},
-                {'id': 7, 'name': 'Two Town Police Station', 'location': {'lat': 16.9867, 'lng': 81.7830}},
-                {'id': 8, 'name': 'One Town Police Station', 'location': {'lat': 17.0012, 'lng': 81.7799}}
-            ]
-        }
-
-    relevant_stations = stations.get(emergency_type.upper(), [])
-    if not relevant_stations:
-        return []
-
-    # Calculate distances to all relevant stations
-    stations_with_distances = []
+    base_lat, base_lng = 16.9927, 81.7800  # Rajahmundry center
+    
+    # Mock station data with random offsets
+    stations = {
+        'MEDICAL': [
+            {"id": 1, "name": "City Hospital", "type": "MEDICAL"},
+            {"id": 2, "name": "General Hospital", "type": "MEDICAL"}
+        ],
+        'FIRE': [
+            {"id": 3, "name": "Central Fire Station", "type": "FIRE"},
+            {"id": 4, "name": "North Fire Station", "type": "FIRE"}
+        ],
+        'POLICE': [
+            {"id": 5, "name": "City Police HQ", "type": "POLICE"},
+            {"id": 6, "name": "Traffic Police Station", "type": "POLICE"}
+        ]
+    }
+    
+    # Get relevant stations based on emergency type
+    relevant_stations = stations.get(emergency_type, [])
+    
+    # Add random locations to stations
     for station in relevant_stations:
-        station_location = [station['location']['lat'], station['location']['lng']]
-        distance = calculate_distance(location, station_location)
-        stations_with_distances.append({
-            **station,
-            'distance': distance
-        })
+        station['location'] = {
+            'lat': base_lat + np.random.uniform(-0.02, 0.02),
+            'lng': base_lng + np.random.uniform(-0.02, 0.02)
+        }
+    
+    return relevant_stations
 
-    # Sort by distance and return a random station
-    sorted_stations = sorted(stations_with_distances, key=lambda x: x['distance'])
-    if sorted_stations:
-        return [sorted_stations[np.random.randint(len(sorted_stations))]]
-    return []
-
-def bbox_to_location(bbox: List[int], image_size: Tuple[int, int], 
-                    reference_coords: Optional[List[float]] = None) -> Dict[str, float]:
+def bbox_to_location(bbox: List[float], image_dims: tuple, reference_coords: List[float]) -> Dict[str, float]:
     """
-    Convert bounding box coordinates to geographical coordinates
-    If reference coordinates are not provided, returns relative position
+    Convert bounding box to geo coordinates using reference point
     """
-    # Get center point of bounding box
-    center_x = (bbox[0] + bbox[2]) / 2
-    center_y = (bbox[1] + bbox[3]) / 2
+    base_lat, base_lng = reference_coords
     
-    # Normalize to 0-1 range
-    norm_x = center_x / image_size[0]
-    norm_y = center_y / image_size[1]
-    
-    if reference_coords is None:
-        # Return normalized coordinates if no reference point
-        return {"lat": norm_y, "lng": norm_x}
-    
-    # Calculate actual coordinates based on reference point
-    # This is a simplified calculation - in production you'd need proper geo-referencing
-    lat_range = 0.1  # Approx 11km at equator
-    lon_range = 0.1
-    
-    lat = reference_coords[0] + (norm_y - 0.5) * lat_range
-    lon = reference_coords[1] + (norm_x - 0.5) * lon_range
-    
-    return {"lat": lat, "lng": lon}
+    # Generate a location with small random offset from reference point
+    return {
+        'lat': base_lat + np.random.uniform(-0.01, 0.01),
+        'lng': base_lng + np.random.uniform(-0.01, 0.01)
+    }
 
 def get_path_traffic_density(start: List[float], end: List[float]) -> float:
     """

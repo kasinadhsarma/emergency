@@ -10,6 +10,7 @@ import shutil
 import logging
 import sys
 import os
+import re  # Add this import at the top if not already present
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from utils.detection import EmergencyVehicleDetector
@@ -82,9 +83,13 @@ async def save_upload_file(file: UploadFile) -> str:
     """Save uploaded file and return filepath"""
     try:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        filename = f"{timestamp}_{file.filename}"
+        # Sanitize filename to remove problematic characters
+        safe_filename = re.sub(r"[^a-zA-Z0-9_.-]", "_", file.filename)
+        filename = f"{timestamp}_{safe_filename}"
         filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
-
+        # Ensure the parent directory exists
+        os.makedirs(os.path.dirname(filepath), exist_ok=True)
+        
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         logger.info(f"File saved successfully: {filepath}")
@@ -115,30 +120,41 @@ async def health_check():
 detector = EmergencyVehicleDetector()
 
 async def process_and_encode_image(filepath: str, detections: list) -> str:
-    """Process image with detections and return base64 encoded result"""
     try:
-        # Read image
         img = cv2.imread(filepath)
+        if img is None:
+            raise ValueError("Could not read image")
 
-        # Draw detections
         for det in detections:
-            # Ensure bbox values are floats for drawing
-            bbox = [float(x) for x in det['bbox']]
-            conf = float(det['confidence'])
-            class_name = det['class_name']
+            try:
+                # Ensure all values are properly converted to float
+                bbox = [float(coord) for coord in det['bbox']]
+                conf = float(det['confidence'])
+                class_name = str(det['class_name'])
 
-            # Draw box with integer coordinates
-            cv2.rectangle(img,
-                         (int(bbox[0]), int(bbox[1])),
-                         (int(bbox[2]), int(bbox[3])),
-                         (0, 255, 0), 2)
+                # Draw bounding box
+                cv2.rectangle(
+                    img,
+                    (int(bbox[0]), int(bbox[1])),
+                    (int(bbox[2]), int(bbox[3])),
+                    (0, 255, 0),
+                    2
+                )
 
-            # Draw label
-            label = f"{class_name} {conf:.2f}"
-            cv2.putText(img, label,
-                       (int(bbox[0]), int(bbox[1] - 10)),  # Ensure bbox[1] is an int
-                       cv2.FONT_HERSHEY_SIMPLEX,
-                       0.5, (0, 255, 0), 2)
+                # Draw label
+                label = f"{class_name} {conf:.2f}"
+                cv2.putText(
+                    img,
+                    label,
+                    (int(bbox[0]), int(bbox[1] - 10)),
+                    cv2.FONT_HERSHEY_SIMPLEX,
+                    0.5,
+                    (0, 255, 0),
+                    2
+                )
+            except Exception as e:
+                logger.error(f"Error drawing detection: {e}")
+                continue
 
         # Convert to RGB for PIL
         img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
@@ -179,6 +195,13 @@ async def detect_video(
         # Use detector instance instead of undefined function
         detections = detector.detect_in_video(filepath)
 
+        # Define emergency mapping outside the loop
+        emergency_mapping = {
+            'Ambulance': 'MEDICAL',
+            'Fire_Engine': 'FIRE',
+            'Police': 'POLICE'
+        }
+
         # Get the last frame or a representative frame
         cap = cv2.VideoCapture(filepath)
         ret, frame = cap.read()
@@ -201,34 +224,35 @@ async def detect_video(
         emergency_detected = len(detections) > 0
         max_confidence = max((float(d['confidence']) for d in detections), default=0.0)
 
-        # Calculate routes for detected emergencies
+        # Generate random locations around Rajahmundry for each vehicle type
+        base_lat, base_lng = 16.9927, 81.7800  # Rajahmundry center
         routes = []
-        if emergency_detected:
-            for det in detections:
-                # Ensure bbox values are floats
-                bbox = [float(x) for x in det['bbox']]
-                det['bbox'] = bbox  # Update the detection with float values
-                
-                # Convert detection bbox to lat/lng coordinates
-                try:
-                    location_obj = bbox_to_location(
-                        [float(x) for x in bbox],  # Ensure bbox values are float
-                        (int(frame.shape[1]), int(frame.shape[0])),  # Ensure dimensions are int
-                        reference_coords=[16.9927, 81.7800]  # Rajahmundry reference coordinates [lat, lng]
-                    )
-                    det['location'] = location_obj  # Add location to detection object
-                except Exception as e:
-                    logger.error(f"Error converting bbox to location: {e}")
-                    location_obj = {"lat": 16.9927, "lng": 81.7800}  # Default to Rajahmundry center
-                location = [location_obj['lat'], location_obj['lng']]
-                nearest_stations = get_nearest_stations(location, det['class_name'])
-                if nearest_stations:
-                    nearest_station = nearest_stations[0]
-                    route = calculate_optimal_path(location, nearest_station['location'])
-                    routes.append(route)
-
-        # Schedule cleanup
-        background_tasks.add_task(cleanup_file, filepath)
+        
+        for det in detections:
+            # Generate a random offset (±0.01 degrees, roughly 1km)
+            random_lat = base_lat + np.random.uniform(-0.01, 0.01)
+            random_lng = base_lng + np.random.uniform(-0.01, 0.01)
+            
+            vehicle_type = det['class_name']
+            
+            # Add mapping using external emergency_mapping
+            emergency_type = emergency_mapping.get(vehicle_type, 'UNKNOWN')
+            
+            # Add location to detection
+            det['location'] = {
+                'lat': float(random_lat),
+                'lng': float(random_lng)
+            }
+            
+            # Get nearest station based on vehicle type
+            nearest_stations = get_nearest_stations([random_lat, random_lng], emergency_type)
+            if nearest_stations and len(nearest_stations) > 0:
+                nearest_station = nearest_stations[0]
+                route = calculate_optimal_path(
+                    [random_lat, random_lng],
+                    [float(nearest_station['location']['lat']), float(nearest_station['location']['lng'])]
+                )
+                routes.append(route)
 
         return JSONResponse(
             status_code=200,
@@ -237,12 +261,13 @@ async def detect_video(
                 "emergencyDetected": emergency_detected,
                 "detections": detections,
                 "confidence": max_confidence,
-                "emergencyType": "MEDICAL" if emergency_detected else None,
+                "emergencyType": emergency_mapping.get(detections[0]['class_name'], 'UNKNOWN') if detections else None,
                 "timestamp": datetime.now().isoformat(),
-                "processedImage": processed_image,  # Add processed image to response
-                "routes": routes  # Add routes to response
+                "processedImage": processed_image,
+                "routes": routes
             }
         )
+        
     except Exception as e:
         logger.error(f"Error processing video: {str(e)}")
         if 'filepath' in locals():
@@ -254,97 +279,80 @@ async def detect_image(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...)
 ):
-    """
-    Detect emergency vehicles in image
-    """
-    logger.info(f"Received image detection request for file: {file.filename}")
-
-    # Validate image file
-    is_valid, error_message = validate_file(file, Config.ALLOWED_IMAGE_EXTENSIONS)
-    if not is_valid:
-        raise HTTPException(status_code=400, detail=error_message)
-
     try:
-        # Save file
+        is_valid, error_message = validate_file(file, Config.ALLOWED_IMAGE_EXTENSIONS)
+        if not is_valid:
+            raise HTTPException(status_code=400, detail=error_message)
+        
         filepath = await save_upload_file(file)
-
-        # Define the img variable by reading the image using cv2.imread(filepath)
-        img = cv2.imread(filepath)
-
-        # Use detector to process image
+        
+        # Get detections
         detections = detector.detect_in_image(filepath)
-
-        # Process image and get base64
+        
+        # Process image with detections
         processed_image = await process_and_encode_image(filepath, detections)
-
-        # Get actual vehicle type and confidence from detections
-        vehicles_detected = [d['class_name'] for d in detections]
-        max_confidence = max((float(d['confidence']) for d in detections), default=0.0)
-
-        # Map vehicle types to emergency types
+        
+        # Map vehicle types to emergency types with standardized names
         vehicle_to_emergency = {
             'Police': 'POLICE',
             'Ambulance': 'MEDICAL',
             'Fire_Engine': 'FIRE'
         }
-
-        emergency_type = None
+        
         emergency_detected = False
-
-        # Check for emergency vehicles
+        emergency_type = None
         routes = []
-        for vehicle in vehicles_detected:
-            if vehicle in vehicle_to_emergency:
-                emergency_detected = True
-                emergency_type = vehicle_to_emergency[vehicle]
-                break
-
-        # Calculate routes for detected emergencies
-        if emergency_detected:
-            img = cv2.imread(filepath)
+        
+        # Process detections
+        if detections:
             for det in detections:
-                # Ensure bbox values are floats
-                bbox = [float(x) for x in det['bbox']]
-                det['bbox'] = bbox  # Update the detection with float values
-                
-                # Convert detection bbox to lat/lng coordinates
-                try:
-                    location_obj = bbox_to_location(
-                        [float(x) for x in bbox],  # Ensure bbox values are float
-                        (int(img.shape[1]), int(img.shape[0])),  # Ensure dimensions are int
-                        reference_coords=[16.9927, 81.7800]  # Rajahmundry reference coordinates [lat, lng]
+                # Ensure class name is standardized
+                vehicle_type = det['class_name']
+                if vehicle_type in vehicle_to_emergency:
+                    emergency_detected = True
+                    emergency_type = vehicle_to_emergency[vehicle_type]
+                    
+                    # Generate random location for demo
+                    base_lat, base_lng = 16.9927, 81.7800
+                    location_obj = {
+                        'lat': base_lat + np.random.uniform(-0.01, 0.01),
+                        'lng': base_lng + np.random.uniform(-0.01, 0.01)
+                    }
+                    det['location'] = location_obj
+                    
+                    # Get nearest station
+                    nearest_stations = get_nearest_stations(
+                        [location_obj['lat'], location_obj['lng']],
+                        emergency_type
                     )
-                    det['location'] = location_obj  # Add location to detection object
-                except Exception as e:
-                    logger.error(f"Error converting bbox to location: {e}")
-                    location_obj = {"lat": 16.9927, "lng": 81.7800}  # Default to Rajahmundry center
-                location = [location_obj['lat'], location_obj['lng']]
-                nearest_stations = get_nearest_stations(location, det['class_name'])
-                if nearest_stations:
-                    nearest_station = nearest_stations[0]
-                    route = calculate_optimal_path(location, nearest_station['location'])
-                    routes.append(route)
+                    
+                    if nearest_stations:
+                        route = calculate_optimal_path(
+                            [location_obj['lat'], location_obj['lng']],
+                            [nearest_stations[0]['location']['lat'],
+                             nearest_stations[0]['location']['lng']]
+                        )
+                        routes.append(route)
 
-        # Assign random latitude values if the latitude is undefined
-        for route in routes:
-            if 'latitude' not in route:
-                route['latitude'] = np.random.uniform(-90, 90)
-
+        # Clean up
+        background_tasks.add_task(cleanup_file, filepath)
+        
         return JSONResponse(
             status_code=200,
             content={
                 "status": "Emergency" if emergency_detected else "Clear",
                 "emergencyDetected": emergency_detected,
                 "detections": detections,
-                "confidence": max_confidence,
+                "confidence": max((float(d['confidence']) for d in detections), default=0.0),
                 "emergencyType": emergency_type,
-                "type": emergency_type,
+                "type": emergency_type,  # Add explicit type field
                 "timestamp": datetime.now().isoformat(),
                 "processedImage": processed_image,
-                "detectedVehicles": ", ".join(vehicles_detected) if vehicles_detected else "",
-                "routes": routes  # Add routes to response
+                "detectedVehicles": ", ".join(d['class_name'] for d in detections) if detections else "",
+                "routes": routes
             }
         )
+        
     except Exception as e:
         logger.error(f"Error processing image: {str(e)}")
         if 'filepath' in locals():

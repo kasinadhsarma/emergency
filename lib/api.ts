@@ -34,15 +34,24 @@ export const detectEmergencyInVideo = async (file: File): Promise<DetectionRespo
     ['Ambulance', 'Fire_Engine', 'Police'].includes(det.class_name)
   );
   
+  // Use emergency_mapping to derive the valid EmergencyType from the first detection
+  const emergency_mapping: Record<string, EmergencyType> = {
+    'Ambulance': 'MEDICAL',
+    'Fire_Engine': 'FIRE',
+    'Police': 'POLICE'
+  };
+
+  // Add return statement with results
   return {
-    ...result,
-    originalImage: originalVideoUrl,
-    status: emergencyDetected ? "Emergency" : "Clear",
-    type: emergencyDetected ? detections[0]?.class_name || 'EMERGENCY_VEHICLE' : undefined,
-    confidence: Math.max(...detections.map((det: Detection) => det.confidence * 100) || [0]),
-    detectedVehicles: detections.map((det: Detection) => det.class_name).join(', '),
+    detections,
     emergencyDetected,
-    detections
+    type: emergencyDetected && detections.length > 0 ? (emergency_mapping[detections[0].class_name] || null) : null,
+    emergencyType: emergencyDetected && detections.length > 0 ? (emergency_mapping[detections[0].class_name] || null) : null,
+    confidence: 0,
+    timestamp: new Date().toISOString(),
+    status: emergencyDetected ? 'Emergency' : 'Clear',
+    originalImage: URL.createObjectURL(file),
+    detectedVehicles: detections.map((det: Detection) => det.class_name).join(', ')
   };
 };
 
@@ -63,15 +72,21 @@ export const detectEmergencyInImage = async (file: File): Promise<DetectionRespo
 
   const result = await response.json();
 
-  // Process detection results
+  // Process detection results with improved type handling
   const detections = result.detections || [];
-  const emergencyDetected = result.emergencyDetected || detections.some(det =>
+  const emergencyDetected = detections.some((det: Detection) => 
     ['Police', 'Ambulance', 'Fire_Engine'].includes(det.class_name)
   );
 
-  // Get emergency type and status
+  // Map emergency types consistently
+  const emergencyTypeMap: Record<string, string> = {
+    'Police': 'POLICE',
+    'Ambulance': 'MEDICAL',
+    'Fire_Engine': 'FIRE'
+  };
+
   const emergencyType = result.emergencyType || (
-    emergencyDetected ? detections[0]?.class_name || 'EMERGENCY_VEHICLE' : undefined
+    emergencyDetected ? (emergencyTypeMap[detections[0]?.class_name as keyof typeof emergencyTypeMap] || 'EMERGENCY_VEHICLE') : null
   );
 
   return {
@@ -79,8 +94,9 @@ export const detectEmergencyInImage = async (file: File): Promise<DetectionRespo
     originalImage: originalImageUrl,
     status: emergencyDetected ? "Emergency" : "Clear",
     type: emergencyType,
+    emergencyType: emergencyType,
     confidence: Math.max(0, result.confidence || 0),
-    detectedVehicles: result.detectedVehicles || detections.map(det => det.class_name).join(', '),
+    detectedVehicles: result.detectedVehicles || detections.map((det: Detection) => det.class_name).join(', '),
     emergencyDetected,
     detections
   };

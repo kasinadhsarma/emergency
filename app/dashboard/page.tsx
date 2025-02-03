@@ -350,16 +350,16 @@ const UserDashboard: React.FC = () => {
             </CardHeader>
             <CardContent className="p-0">
               <div className="h-[600px]">
-                <Map
-                  paths={paths}
-                  markers={detectionResults?.detections.map((detection: Detection) => ({
-                    position: RAJAHMUNDRY_COORDINATES,
-                    type: detection.class_name,
-                    confidence: detection.confidence,
-                  })) || []}
-                  center={RAJAHMUNDRY_COORDINATES}
-                  zoom={13}
-                />
+<Map
+  paths={paths}
+  markers={detectionResults?.detections.map((detection: Detection) => ({
+    position: detection.location ? [detection.location.lat, detection.location.lng] : RAJAHMUNDRY_COORDINATES,
+    type: detection.class_name,
+    confidence: detection.confidence,
+  })) || []}
+  center={RAJAHMUNDRY_COORDINATES}
+  zoom={13}
+/>
               </div>
             </CardContent>
           </Card>

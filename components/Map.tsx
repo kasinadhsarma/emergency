@@ -26,7 +26,7 @@ interface MapProps {
 
 const getMarkerColor = (type: string): string => {
   return type.toLowerCase().includes('ambulance') ? '#3b82f6' :  // Blue
-         type.toLowerCase().includes('fire') ? '#ef4444' :       // Red
+         type.toLowerCase().includes('fire engine') ? '#ef4444' :       // Red
          type.toLowerCase().includes('police') ? '#f97316' :     // Orange
          '#6b7280';  // Gray (default)
 };
