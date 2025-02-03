@@ -125,6 +125,22 @@ export const fetchRouteData = async (start: [number, number], end: [number, numb
   return response.json();
 };
 
+export const fetchTrafficPatterns = async (): Promise<any[]> => {
+  const response = await fetch(`${API_URL}/api/traffic-patterns`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch traffic patterns');
+  }
+  return response.json();
+};
+
+export const fetchHistoricalData = async (): Promise<any[]> => {
+  const response = await fetch(`${API_URL}/api/historical-data`);
+  if (!response.ok) {
+    throw new Error('Failed to fetch historical data');
+  }
+  return response.json();
+};
+
 export async function getEmergencyLocations() {
   // Implement in future
   return [];

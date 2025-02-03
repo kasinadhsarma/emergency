@@ -408,6 +408,69 @@ async def calculate_route(
         logger.error(f"Error calculating route: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/api/traffic-patterns")
+async def get_traffic_patterns():
+    """
+    Get daily traffic patterns
+    """
+    try:
+        # Mock data for daily traffic patterns
+        traffic_patterns = [
+            {"time": "00:00", "flow": 10},
+            {"time": "01:00", "flow": 15},
+            {"time": "02:00", "flow": 12},
+            {"time": "03:00", "flow": 8},
+            {"time": "04:00", "flow": 5},
+            {"time": "05:00", "flow": 7},
+            {"time": "06:00", "flow": 20},
+            {"time": "07:00", "flow": 35},
+            {"time": "08:00", "flow": 50},
+            {"time": "09:00", "flow": 60},
+            {"time": "10:00", "flow": 55},
+            {"time": "11:00", "flow": 50},
+            {"time": "12:00", "flow": 45},
+            {"time": "13:00", "flow": 40},
+            {"time": "14:00", "flow": 35},
+            {"time": "15:00", "flow": 30},
+            {"time": "16:00", "flow": 25},
+            {"time": "17:00", "flow": 20},
+            {"time": "18:00", "flow": 15},
+            {"time": "19:00", "flow": 10},
+            {"time": "20:00", "flow": 8},
+            {"time": "21:00", "flow": 6},
+            {"time": "22:00", "flow": 5},
+            {"time": "23:00", "flow": 4}
+        ]
+        return JSONResponse(
+            status_code=200,
+            content=traffic_patterns
+        )
+    except Exception as e:
+        logger.error(f"Error fetching traffic patterns: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/historical-data")
+async def get_historical_data():
+    """
+    Get historical traffic data
+    """
+    try:
+        # Mock data for historical traffic impact by conditions
+        historical_data = [
+            {"condition": "Rain", "impact": 30},
+            {"condition": "Snow", "impact": 50},
+            {"condition": "Clear", "impact": 10},
+            {"condition": "Fog", "impact": 20},
+            {"condition": "Wind", "impact": 15}
+        ]
+        return JSONResponse(
+            status_code=200,
+            content=historical_data
+        )
+    except Exception as e:
+        logger.error(f"Error fetching historical data: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 @app.exception_handler(404)
 async def not_found_handler(request, exc):
     """Handle 404 errors"""
