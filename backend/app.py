@@ -104,6 +104,8 @@ def cleanup_file(filepath: str):
         if os.path.exists(filepath):
             os.remove(filepath)
             logger.info(f"Cleaned up file: {filepath}")
+    except FileNotFoundError:
+        logger.warning(f"File not found for cleanup: {filepath}")
     except Exception as e:
         logger.error(f"Error cleaning up file {filepath}: {str(e)}")
 
