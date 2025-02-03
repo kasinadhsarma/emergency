@@ -51,6 +51,7 @@ export const detectEmergencyInVideo = async (file: File): Promise<DetectionRespo
     timestamp: new Date().toISOString(),
     status: emergencyDetected ? 'Emergency' : 'Clear',
     originalImage: URL.createObjectURL(file),
+    processedImage: result.processedImage || undefined,
     detectedVehicles: detections.map((det: Detection) => det.class_name).join(', ')
   };
 };
