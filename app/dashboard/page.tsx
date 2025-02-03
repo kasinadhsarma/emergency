@@ -16,8 +16,9 @@ import dynamic from 'next/dynamic';
 
 // Use SSR: false to prevent hydration issues with map
 const Map = dynamic(() => import('../../components/Map'), { ssr: false });
+const Chart = dynamic(() => import('../../components/ui/chart'), { ssr: false });
 
-import { getStations, detectEmergencyInVideo, detectEmergencyInImage } from '../../lib/api';
+import { getStations, detectEmergencyInVideo, detectEmergencyInImage, fetchTrafficPatterns, fetchHistoricalData } from '../../lib/api';
 import {
   EmergencyType,
   Detection,
@@ -51,6 +52,8 @@ const UserDashboard: React.FC = () => {
   const [activeEmergency, setActiveEmergency] = useState<boolean>(false);
   const [selectedService, setSelectedService] = useState<EmergencyType>('MEDICAL');
   const [paths, setPaths] = useState<Array<{ start: [number, number]; end: [number, number]; vehicleDensity: number }>>([]);
+  const [trafficPatterns, setTrafficPatterns] = useState<any[]>([]);
+  const [historicalData, setHistoricalData] = useState<any[]>([]);
 
   useEffect(() => {
     return () => {
@@ -76,6 +79,20 @@ const UserDashboard: React.FC = () => {
       }
     };
     initStations();
+  }, []);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const trafficData = await fetchTrafficPatterns();
+        setTrafficPatterns(trafficData);
+        const historicalData = await fetchHistoricalData();
+        setHistoricalData(historicalData);
+      } catch (error) {
+        console.error("Error fetching data:", error);
+      }
+    };
+    fetchData();
   }, []);
 
   const handleVideoUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -641,6 +658,55 @@ const UserDashboard: React.FC = () => {
               </AlertDescription>
             </Alert>
           )}
+        </div>
+
+        {/* Traffic Patterns and Historical Data */}
+        <div className="mt-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart2 className="h-5 w-5" />
+                  Traffic Patterns
+                </CardTitle>
+                <CardDescription>Daily Traffic Flow (%)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ChartContainer config={{}}>
+                  <RechartsPrimitive.LineChart data={trafficPatterns}>
+                    <RechartsPrimitive.CartesianGrid strokeDasharray="3 3" />
+                    <RechartsPrimitive.XAxis dataKey="time" />
+                    <RechartsPrimitive.YAxis />
+                    <RechartsPrimitive.Tooltip />
+                    <RechartsPrimitive.Legend />
+                    <RechartsPrimitive.Line type="monotone" dataKey="flow" stroke="#8884d8" />
+                  </RechartsPrimitive.LineChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-lg">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <BarChart2 className="h-5 w-5" />
+                  Historical Data
+                </CardTitle>
+                <CardDescription>Impact by Conditions (%)</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ChartContainer config={{}}>
+                  <RechartsPrimitive.BarChart data={historicalData}>
+                    <RechartsPrimitive.CartesianGrid strokeDasharray="3 3" />
+                    <RechartsPrimitive.XAxis dataKey="condition" />
+                    <RechartsPrimitive.YAxis />
+                    <RechartsPrimitive.Tooltip />
+                    <RechartsPrimitive.Legend />
+                    <RechartsPrimitive.Bar dataKey="impact" fill="#82ca9d" />
+                  </RechartsPrimitive.BarChart>
+                </ChartContainer>
+              </CardContent>
+            </Card>
+          </div>
         </div>
       </div>
     </Layout>
