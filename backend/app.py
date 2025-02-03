@@ -89,7 +89,7 @@ async def save_upload_file(file: UploadFile) -> str:
         filepath = os.path.join(Config.UPLOAD_FOLDER, filename)
         # Ensure the parent directory exists
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        
+
         with open(filepath, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         logger.info(f"File saved successfully: {filepath}")
@@ -229,23 +229,23 @@ async def detect_video(
         # Generate random locations around Rajahmundry for each vehicle type
         base_lat, base_lng = 16.9927, 81.7800  # Rajahmundry center
         routes = []
-        
+
         for det in detections:
             # Generate a random offset (±0.01 degrees, roughly 1km)
             random_lat = base_lat + np.random.uniform(-0.01, 0.01)
             random_lng = base_lng + np.random.uniform(-0.01, 0.01)
-            
+
             vehicle_type = det['class_name']
-            
+
             # Add mapping using external emergency_mapping
             emergency_type = emergency_mapping.get(vehicle_type, 'UNKNOWN')
-            
+
             # Add location to detection
             det['location'] = {
                 'lat': float(random_lat),
                 'lng': float(random_lng)
             }
-            
+
             # Get nearest station based on vehicle type
             nearest_stations = get_nearest_stations([random_lat, random_lng], emergency_type)
             if nearest_stations and len(nearest_stations) > 0:
@@ -269,7 +269,7 @@ async def detect_video(
                 "routes": routes
             }
         )
-        
+
     except Exception as e:
         logger.error(f"Error processing video: {str(e)}")
         if 'filepath' in locals():
@@ -285,26 +285,26 @@ async def detect_image(
         is_valid, error_message = validate_file(file, Config.ALLOWED_IMAGE_EXTENSIONS)
         if not is_valid:
             raise HTTPException(status_code=400, detail=error_message)
-        
+
         filepath = await save_upload_file(file)
-        
+
         # Get detections
         detections = detector.detect_in_image(filepath)
-        
+
         # Process image with detections
         processed_image = await process_and_encode_image(filepath, detections)
-        
+
         # Map vehicle types to emergency types with standardized names
         vehicle_to_emergency = {
             'Police': 'POLICE',
             'Ambulance': 'MEDICAL',
             'Fire_Engine': 'FIRE'
         }
-        
+
         emergency_detected = False
         emergency_type = None
         routes = []
-        
+
         # Process detections
         if detections:
             for det in detections:
@@ -313,7 +313,7 @@ async def detect_image(
                 if vehicle_type in vehicle_to_emergency:
                     emergency_detected = True
                     emergency_type = vehicle_to_emergency[vehicle_type]
-                    
+
                     # Generate random location for demo
                     base_lat, base_lng = 16.9927, 81.7800
                     location_obj = {
@@ -321,13 +321,13 @@ async def detect_image(
                         'lng': base_lng + np.random.uniform(-0.01, 0.01)
                     }
                     det['location'] = location_obj
-                    
+
                     # Get nearest station
                     nearest_stations = get_nearest_stations(
                         [location_obj['lat'], location_obj['lng']],
                         emergency_type
                     )
-                    
+
                     if nearest_stations:
                         route = calculate_optimal_path(
                             [location_obj['lat'], location_obj['lng']],
@@ -338,7 +338,7 @@ async def detect_image(
 
         # Clean up
         background_tasks.add_task(cleanup_file, filepath)
-        
+
         return JSONResponse(
             status_code=200,
             content={
@@ -354,7 +354,7 @@ async def detect_image(
                 "routes": routes
             }
         )
-        
+
     except Exception as e:
         logger.error(f"Error processing image: {str(e)}")
         if 'filepath' in locals():

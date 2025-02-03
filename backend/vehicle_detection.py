@@ -6,10 +6,10 @@ import torchvision.transforms as T
 from ultralytics import YOLO
 from torch.cuda.amp import autocast
 from concurrent.futures import ThreadPoolExecutor
-from backend.utils.location import bbox_to_location, get_nearest_stations, get_path_traffic_density
+from utils.location import bbox_to_location, get_nearest_stations, get_path_traffic_density
 
 class VehicleDetector:
-    def __init__(self, model_path: str = 'models/emergency_vehicle_detector_best.pt', batch_size: int = 4, num_threads: int = 4):
+    def __init__(self, model_path: str = 'backend/best.pt', batch_size: int = 4, num_threads: int = 4):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         self.batch_size = batch_size
         self.thread_pool = ThreadPoolExecutor(max_workers=num_threads)
@@ -23,50 +23,50 @@ class VehicleDetector:
         else:
             print("Error: Unsupported file format")
 
-def _process_media(self, source: str, output_path: str = None):
-    img = None
-    if source.lower().endswith(('.jpg', '.jpeg', '.png')):
-        img = cv2.imread(source)
-        if img is None:
-            print(f"Error: Unable to read image {source}")
-            return
-        detections = self._run_inference(img)
-        result_img = self._draw_detections(img, detections)
-        cv2.imshow('Emergency Vehicle Detection', result_img)
-        cv2.waitKey(0)
-        cv2.destroyAllWindows()
-        if output_path:
-            cv2.imwrite(output_path, result_img)
+    def _process_media(self, source: str, output_path: str = None):
+        img = None
+        if source.lower().endswith(('.jpg', '.jpeg', '.png')):
+            img = cv2.imread(source)
+            if img is None:
+                print(f"Error: Unable to read image {source}")
+                return
+            detections = self._run_inference(img)
+            result_img = self._draw_detections(img, detections)
+            cv2.imshow('Emergency Vehicle Detection', result_img)
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
+            if output_path:
+                cv2.imwrite(output_path, result_img)
 
-        # Add location detection, nearest station finding, and routing
-        for detection in detections:
-            bbox = detection['bbox']
-            location = bbox_to_location(bbox, img.shape[:2], reference_coords=[17.0005, 81.7800])  # Provide reference coordinates
-            if location is None:
-                print(f"Error: Unable to determine location for bbox {bbox}")
-                continue
-            detection['location'] = location
-            nearest_stations = get_nearest_stations(location, detection['class'])
-            detection['nearest_stations'] = nearest_stations
-            if nearest_stations:
-                nearest_station = nearest_stations[0]
-                route = get_path_traffic_density(location, nearest_station['location'])
-                detection['route'] = route
-    else:
-        self._process_video(source, output_path)
+            # Add location detection, nearest station finding, and routing
+            for detection in detections:
+                bbox = detection['bbox']
+                location = bbox_to_location(bbox, img.shape[:2], reference_coords=[17.0005, 81.7800])  # Provide reference coordinates
+                if location is None:
+                    print(f"Error: Unable to determine location for bbox {bbox}")
+                    continue
+                detection['location'] = location
+                nearest_stations = get_nearest_stations(location, detection['class'])
+                detection['nearest_stations'] = nearest_stations
+                if nearest_stations:
+                    nearest_station = nearest_stations[0]
+                    route = get_path_traffic_density(location, nearest_station['location'])
+                    detection['route'] = route
+        else:
+            self._process_video(source, output_path)
 
-    if img is not None:
-        # Add location detection, nearest station finding, and routing
-        for detection in detections:
-            bbox = detection['bbox']
-            location = bbox_to_location(bbox, img.shape[:2], reference_coords=[17.0005, 81.7800])  # Provide reference coordinates
-            detection['location'] = location
-            nearest_stations = get_nearest_stations(location, detection['class'])
-            detection['nearest_stations'] = nearest_stations
-            if nearest_stations:
-                nearest_station = nearest_stations[0]
-                route = get_path_traffic_density(location, nearest_station['location'])
-                detection['route'] = route
+        if img is not None:
+            # Add location detection, nearest station finding, and routing
+            for detection in detections:
+                bbox = detection['bbox']
+                location = bbox_to_location(bbox, img.shape[:2], reference_coords=[17.0005, 81.7800])  # Provide reference coordinates
+                detection['location'] = location
+                nearest_stations = get_nearest_stations(location, detection['class'])
+                detection['nearest_stations'] = nearest_stations
+                if nearest_stations:
+                    nearest_station = nearest_stations[0]
+                    route = get_path_traffic_density(location, nearest_station['location'])
+                    detection['route'] = route
 
     def _run_inference(self, image: np.ndarray):
         results = self.model(image)
@@ -104,22 +104,27 @@ def _process_media(self, source: str, output_path: str = None):
         if not cap.isOpened():
             print(f"Error: Could not open video {video_path}")
             return
-        
+        print(f"Video {video_path} opened successfully")
+
         fourcc = cv2.VideoWriter_fourcc(*'mp4v') if output_path else None
         out = cv2.VideoWriter(output_path, fourcc, 20.0, (int(cap.get(3)), int(cap.get(4)))) if output_path else None
-        
+
         while cap.isOpened():
             ret, frame = cap.read()
             if not ret:
+                print("Error: Could not read frame from video")
                 break
+            print("Frame read successfully")
             detections = self._run_inference(frame)
+            print(f"Detections made: {detections}")
             frame_with_detections = self._draw_detections(frame, detections)
             if output_path and out:
                 out.write(frame_with_detections)
+                print(f"Frame with detections written to output video")
             cv2.imshow('Emergency Vehicle Detection', frame_with_detections)
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
-        
+
         cap.release()
         if out:
             out.release()
@@ -127,7 +132,6 @@ def _process_media(self, source: str, output_path: str = None):
 
 if __name__ == "__main__":
     detector = VehicleDetector()
-    image_path = "backend/Dataset/images/test/45.png"
-    video_path = "backend/Dataset/videos/test_video.mp4"
-    detector.detect(image_path, "output_image.png")
-    detector.detect(video_path, "output_video.mp4")
+    video_path = "backend/uploads/20250203_133747_WhatsApp_Video_2025-01-30_at_2.08.47_PM.mp4"
+    output_path = "backend/uploads/20250203_133747_WhatsApp_Video_2025-01-30_at_2.08.47_PM_detected.mp4"
+    detector.detect(video_path, output_path)
