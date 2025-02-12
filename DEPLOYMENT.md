@@ -44,6 +44,16 @@ vercel
 - Memory allocation is 3008MB for Python functions
 - The frontend proxies API requests to the backend through the /api path
 
+## Backend Endpoints
+
+- **Detect Vehicles in Image**: `/api/detect/image`
+- **Detect Vehicles in Video**: `/api/detect/video`
+- **Health Check**: `/api/health`
+- **Get Stations**: `/api/stations`
+- **Calculate Route**: `/api/route`
+- **Get Traffic Patterns**: `/api/traffic-patterns`
+- **Get Historical Data**: `/api/historical-data`
+
 ## Troubleshooting
 
 1. If the backend fails to start, check the Vercel logs for Python package installation issues

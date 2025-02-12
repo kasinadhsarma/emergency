@@ -2,7 +2,7 @@ import { toast } from '@/components/ui/use-toast';
 
 export async function checkBackendHealth(): Promise<boolean> {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/health`);
+    const response = await fetch(`/api/health`);
     if (!response.ok) {
       throw new Error('Backend health check failed');
     }
