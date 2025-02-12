@@ -30,7 +30,8 @@ class Config:
     API_TITLE = "Emergency Response API"
     API_DESCRIPTION = "API for emergency vehicle detection and response management"
 
-    UPLOAD_FOLDER = 'uploads'
+    # Use /tmp for Vercel serverless environment
+    UPLOAD_FOLDER = '/tmp/uploads' if os.getenv('VERCEL') else 'uploads'
     ALLOWED_IMAGE_EXTENSIONS = {'jpg', 'jpeg', 'png'}
     ALLOWED_VIDEO_EXTENSIONS = {'mp4', 'avi', 'mov'}
     MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
