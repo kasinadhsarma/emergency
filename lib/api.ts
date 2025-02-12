@@ -1,9 +1,9 @@
 import { EmergencyType, StationLocation, StationData, Detection, DetectionResponse, NearestLocation } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
+const API_URL = '/api';
 
 export const getStations = async (): Promise<StationData> => {
-  const response = await fetch(`${API_URL}/api/stations`);
+  const response = await fetch(`${API_URL}/stations`);
   if (!response.ok) {
     throw new Error('Failed to fetch stations');
   }
@@ -17,7 +17,7 @@ export const detectEmergencyInVideo = async (file: File): Promise<DetectionRespo
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_URL}/api/detect/video`, {
+  const response = await fetch(`${API_URL}/detect/video`, {
     method: 'POST',
     body: formData
   });
@@ -62,7 +62,7 @@ export const detectEmergencyInImage = async (file: File): Promise<DetectionRespo
   const formData = new FormData();
   formData.append('file', file);
 
-  const response = await fetch(`${API_URL}/api/detect/image`, {
+  const response = await fetch(`${API_URL}/detect/image`, {
     method: 'POST',
     body: formData
   });
@@ -104,7 +104,7 @@ export const detectEmergencyInImage = async (file: File): Promise<DetectionRespo
 };
 
 export const fetchRouteData = async (start: [number, number], end: [number, number], emergencyType: EmergencyType) => {
-  const response = await fetch(`${API_URL}/api/route`, {
+  const response = await fetch(`${API_URL}/route`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -126,7 +126,7 @@ export const fetchRouteData = async (start: [number, number], end: [number, numb
 };
 
 export const fetchTrafficPatterns = async (): Promise<any[]> => {
-  const response = await fetch(`${API_URL}/api/traffic-patterns`);
+  const response = await fetch(`${API_URL}/traffic-patterns`);
   if (!response.ok) {
     throw new Error('Failed to fetch traffic patterns');
   }
@@ -134,7 +134,7 @@ export const fetchTrafficPatterns = async (): Promise<any[]> => {
 };
 
 export const fetchHistoricalData = async (): Promise<any[]> => {
-  const response = await fetch(`${API_URL}/api/historical-data`);
+  const response = await fetch(`${API_URL}/historical-data`);
   if (!response.ok) {
     throw new Error('Failed to fetch historical data');
   }
