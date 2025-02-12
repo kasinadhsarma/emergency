@@ -13,10 +13,11 @@ import {
   ChevronRight, Activity, BarChart2
 } from "lucide-react";
 import dynamic from 'next/dynamic';
+import * as RechartsPrimitive from 'recharts';
+import { ChartContainer } from '../../components/ui/chart';
 
 // Use SSR: false to prevent hydration issues with map
 const Map = dynamic(() => import('../../components/Map'), { ssr: false });
-const Chart = dynamic(() => import('../../components/ui/chart'), { ssr: false });
 
 import { getStations, detectEmergencyInVideo, detectEmergencyInImage, fetchTrafficPatterns, fetchHistoricalData } from '../../lib/api';
 import {
@@ -64,21 +65,26 @@ const UserDashboard: React.FC = () => {
   }, [detectionResults]);
 
   useEffect(() => {
-    const initStations = async () => {
+    const initApplication = async () => {
       setIsInitializing(true);
       try {
+        const isHealthy = await import('@/lib/checkBackendHealth').then(mod => mod.checkBackendHealth());
+        if (!isHealthy) {
+          throw new Error('Backend health check failed');
+        }
+
         const stationData = await getStations();
         setStations(stationData);
         setModelInitialized(true);
       } catch (error) {
-        console.error("Error initializing stations:", error);
+        console.error("Error initializing application:", error);
         setModelInitialized(false);
-        setModelError("Failed to initialize stations");
+        setModelError(error instanceof Error ? error.message : "Failed to initialize application");
       } finally {
         setIsInitializing(false);
       }
     };
-    initStations();
+    initApplication();
   }, []);
 
   useEffect(() => {
@@ -669,9 +675,8 @@ const UserDashboard: React.FC = () => {
                   <BarChart2 className="h-5 w-5" />
                   Traffic Patterns
                 </CardTitle>
-                <CardDescription>Daily Traffic Flow (%)</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                 <ChartContainer config={{}}>
                   <RechartsPrimitive.LineChart data={trafficPatterns}>
                     <RechartsPrimitive.CartesianGrid strokeDasharray="3 3" />
@@ -684,7 +689,7 @@ const UserDashboard: React.FC = () => {
                 </ChartContainer>
               </CardContent>
             </Card>
-
+            
             <Card className="shadow-lg">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -693,7 +698,7 @@ const UserDashboard: React.FC = () => {
                 </CardTitle>
                 <CardDescription>Impact by Conditions (%)</CardDescription>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent>
                 <ChartContainer config={{}}>
                   <RechartsPrimitive.BarChart data={historicalData}>
                     <RechartsPrimitive.CartesianGrid strokeDasharray="3 3" />

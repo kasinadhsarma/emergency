@@ -1,6 +1,6 @@
 import { EmergencyType, StationLocation, StationData, Detection, DetectionResponse, NearestLocation } from "./types";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+const API_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8000';
 
 export const getStations = async (): Promise<StationData> => {
   const response = await fetch(`${API_URL}/api/stations`);
