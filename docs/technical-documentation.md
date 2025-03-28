@@ -194,16 +194,16 @@ The system architecture consists of the following components:
 - **Backend API**: Handles requests from the user interface and communicates with the detection and optimization modules.
 
 ### 5.2 UML DIAGRAMS
-The following UML diagrams illustrate the system design:
+The following UML diagrams illustrate the system design. For detailed diagrams, see [UML Diagrams](./uml-diagrams.md).
 
 #### 5.2.1 USE CASE DIAGRAM
-![Use Case Diagram](images/use_case_diagram.png)
+This diagram shows the interactions between actors (Dispatcher, Emergency Vehicle Driver) and the system's functionalities.
 
 #### 5.2.2 CLASS DIAGRAM
-![Class Diagram](images/class_diagram.png)
+The class diagram outlines the system's structure including VideoProcessor, ObjectDetection, RouteOptimizer, and UserInterface classes.
 
 #### 5.2.3 SEQUENCE DIAGRAM
-![Sequence Diagram](images/sequence_diagram.png)
+The sequence diagram illustrates the interactions between system components during emergency vehicle detection and route optimization.
 
 ### 5.3 DATABASE DESIGN
 The database design includes the following tables:
