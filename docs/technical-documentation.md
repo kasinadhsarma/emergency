@@ -259,33 +259,160 @@ The project successfully implements a system for detecting emergency vehicles in
 ## Appendix
 
 ### 1. SAMPLE CODE
+
+#### 1.1 Emergency Vehicle Detection
 ```python
+from ultralytics import YOLO
 import cv2
 import numpy as np
-from ultralytics import YOLO
 
-# Load the YOLOv8 model
-model = YOLO('yolov8n.pt')
+class VehicleDetector:
+    def __init__(self, model_path: str = 'best.pt'):
+        # Initialize YOLO model for vehicle detection
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.model = YOLO(model_path).to(self.device)
+        self.model.eval()
+        self.classes = {0: 'ambulance', 1: 'police', 2: 'firetruck'}
 
-# Load an image
-image = cv2.imread('image.jpg')
+    def detect(self, image: np.ndarray):
+        # Run inference on image
+        results = self.model(image)
+        detections = []
+        
+        # Process detections
+        for r in results:
+            for box in r.boxes:
+                x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                conf = box.conf.cpu().numpy()[0]
+                cls = int(box.cls.cpu().numpy()[0])
+                if conf > 0.5 and cls in self.classes:
+                    detections.append({
+                        'class': self.classes[cls],
+                        'confidence': float(conf),
+                        'bbox': np.array([x1, y1, x2, y2])
+                    })
+        
+        # Draw detections on image
+        for det in detections:
+            bbox = det['bbox'].astype(int)
+            label = f"{det['class']} {det['confidence']:.2f}"
+            color = (0, 255, 0)
+            if det['class'] == 'ambulance':
+                color = (0, 0, 255)  # Red for ambulance
+            elif det['class'] == 'police':
+                color = (255, 0, 0)  # Blue for police
+            cv2.rectangle(image, (bbox[0], bbox[1]), (bbox[2], bbox[3]), color, 2)
+            cv2.putText(image, label, (bbox[0], bbox[1]-10), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 2)
+        
+        return image, detections
 
-# Perform detection
-results = model(image)
+# Usage example
+detector = VehicleDetector()
+image = cv2.imread('emergency_vehicle.jpg')
+result_image, detections = detector.detect(image)
+cv2.imwrite('detected_vehicles.jpg', result_image)
+```
 
-# Draw bounding boxes on the image
-for result in results:
-    for box in result.boxes:
-        x1, y1, x2, y2 = map(int, box.xyxy[0])
-        conf = float(box.conf[0])
-        cls = int(box.cls[0])
-        class_name = result.names[cls]
-        cv2.rectangle(image, (x1, y1), (x2, y2), (0, 255, 0), 2)
-        label = f'{class_name} {conf:.2f}'
-        cv2.putText(image, label, (x1, y1 - 10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 2)
+#### 1.2 Route Optimization with Traffic Consideration
+```python
+from typing import List, Dict
+import numpy as np
 
-# Save the image with bounding boxes
-cv2.imwrite('image_with_boxes.jpg', image)
+class Node:
+    def __init__(self, position: List[float], g: float = float('inf'), 
+                 h: float = 0, parent = None):
+        self.position = position
+        self.g = g  # Cost from start to current node
+        self.h = h  # Heuristic cost to goal
+        self.f = g + h  # Total cost
+        self.parent = parent
+
+def calculate_optimal_path(start: List[float], end: List[float], 
+                         emergency_type: str = 'MEDICAL') -> Dict:
+    """Calculate optimal route considering traffic density"""
+    
+    start_node = Node(start, g=0, h=heuristic(start, end))
+    open_list = [start_node]
+    closed_list = []
+    
+    while open_list:
+        # Get node with lowest total cost
+        current = min(open_list, key=lambda x: x.f)
+        
+        # Check if reached destination
+        if calculate_distance(current.position, end) < 0.1:  # Within 100m
+            # Reconstruct path
+            path = []
+            current_node = current
+            while current_node:
+                path.append({
+                    'position': current_node.position,
+                    'traffic_density': get_path_traffic_density(
+                        current_node.position,
+                        current_node.parent.position if current_node.parent 
+                        else current_node.position
+                    )
+                })
+                current_node = current_node.parent
+            
+            # Calculate metrics
+            total_distance = sum(calculate_distance(path[i]['position'], 
+                               path[i-1]['position']) 
+                               for i in range(1, len(path)))
+            avg_traffic = np.mean([p['traffic_density'] for p in path])
+            
+            return {
+                'path': list(reversed(path)),
+                'total_distance': round(total_distance, 2),
+                'average_traffic_density': round(avg_traffic, 2),
+                'emergency_type': emergency_type
+            }
+            
+        # Process neighbors
+        open_list.remove(current)
+        closed_list.append(current)
+        
+        for neighbor_pos in get_neighbors(current.position):
+            # Skip if already evaluated
+            if any(n.position == neighbor_pos for n in closed_list):
+                continue
+            
+            # Calculate costs with traffic consideration
+            traffic_density = get_path_traffic_density(current.position, 
+                                                     neighbor_pos)
+            traffic_penalty = 2.0 if traffic_density > 70.0 else 1.0
+            movement_cost = (calculate_distance(current.position, neighbor_pos) 
+                           * traffic_penalty)
+            
+            # Update neighbor costs if better path found
+            tentative_g = current.g + movement_cost
+            neighbor = next((n for n in open_list 
+                           if n.position == neighbor_pos), None)
+            
+            if not neighbor:
+                neighbor = Node(neighbor_pos, 
+                              g=tentative_g,
+                              h=heuristic(neighbor_pos, end),
+                              parent=current)
+                open_list.append(neighbor)
+            elif tentative_g < neighbor.g:
+                neighbor.g = tentative_g
+                neighbor.f = neighbor.g + neighbor.h
+                neighbor.parent = current
+
+# Usage example
+start_location = [17.0005, 81.7800]  # Starting coordinates
+end_location = [17.0105, 81.7900]    # Destination coordinates
+
+optimal_route = calculate_optimal_path(
+    start_location, 
+    end_location, 
+    emergency_type='MEDICAL'
+)
+
+print(f"Total Distance: {optimal_route['total_distance']} km")
+print(f"Average Traffic Density: {optimal_route['average_traffic_density']}%")
 ```
 
 ### 2. SCREENS
