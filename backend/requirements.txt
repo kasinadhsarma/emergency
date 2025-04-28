@@ -10,7 +10,7 @@ bcrypt==4.1.2
 python-dotenv==1.0.0
 aiofiles==24.1.0  # Match latest installed version
 ultralytics==8.3.68  # Updated from installed version
-torch==2.2.1  # Updated to match installed version
+torch==2.6.0  # Updated to match installed version
 torchvision==0.17.1  # Updated to match installed version
 pillow==11.1.0
 scipy==1.15.1  # Updated to match installed version
